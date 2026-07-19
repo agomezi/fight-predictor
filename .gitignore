@@ -1,0 +1,22 @@
+# Data — download from Kaggle, don't commit
+data/
+*.csv
+*.parquet
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.ipynb_checkpoints/
+
+# Secrets
+.env
+kaggle.json
+*.key
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
