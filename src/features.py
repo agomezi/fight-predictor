@@ -15,6 +15,13 @@ matchup features. Four things have to be right before any of it is usable:
 The unresolved-safe join key is Fighter_URL (a real unique id). The fights
 table doesn't carry it, so for names that collide across profiles we pick the
 profile whose weight best matches the bout's weight class.
+
+The resulting table is deliberately not just the model matrix: alongside the
+features it carries METADATA_NAMES -- the fight id, both resolved fighter ids,
+and the Method/End_Round outcome detail. The model never sees any of it
+(to_matrix selects FEATURE_NAMES), but keeping the ids means downstream work can
+key a fighter by a unique id rather than a name string, and can join back to the
+raw per-fight stats that rolling as-of-fight aggregates are built from.
 """
 
 from __future__ import annotations
@@ -152,6 +159,13 @@ def build_features(df: pd.DataFrame, seed: int = RANDOM_SEED) -> pd.DataFrame:
     For each fight a coin flip decides whether A = Fighter_1 (a_is_f1=True) or
     A = Fighter_2. The label is 'did A win', and every diff is A minus B, so no
     feature encodes the original Fighter_1/Fighter_2 ordering.
+
+    The table also carries METADATA_NAMES: the fight and fighter ids, and the
+    Method/End_Round outcome detail. None of it reaches the model -- to_matrix
+    selects FEATURE_NAMES explicitly -- but it is what lets later work join back
+    to the raw per-fight stats and identify a fighter by a unique id instead of
+    a name string. fighter_A_url / fighter_B_url follow the same A/B swap as the
+    features, so they always describe the same side as reach_diff does.
     """
     df = df.reset_index(drop=True)
     rng = np.random.default_rng(seed)
@@ -178,11 +192,23 @@ def build_features(df: pd.DataFrame, seed: int = RANDOM_SEED) -> pd.DataFrame:
     label = (df["Winner"].astype("string") == a_name).astype(int)
 
     out = pd.DataFrame({
+        # Identity and event metadata. Never model inputs -- carried so that
+        # downstream code can join back to the raw per-fight stats and can key
+        # a fighter by a unique id rather than by a name string.
+        "Fight_URL": df["Fight_URL"],
         "Event_Date": df["Event_Date"],
         "Weight_Class": df["Weight_Class"],
         "fighter_A": a_name,
         "fighter_B": pick(df["Fighter_2"], df["Fighter_1"]),
+        "fighter_A_url": pick(df["F1_url"], df["F2_url"]),
+        "fighter_B_url": pick(df["F2_url"], df["F1_url"]),
         "a_is_f1": a_is_f1,
+        # Outcome detail for the method/round head. Also never model inputs --
+        # these describe HOW the fight ended, so feeding them to the winner
+        # model would be target leakage.
+        "Method": df["Method"],
+        "End_Round": df["End_Round"],
+        # Symmetric matchup features -- the model-facing set is FEATURE_NAMES.
         "reach_diff": a_reach - b_reach,
         "height_diff": a_height - b_height,
         "age_diff": a_age - b_age,
@@ -246,6 +272,37 @@ def chronological_split(features: pd.DataFrame, test_frac: float = 0.18):
 # ---------------------------------------------------------------------------
 # 5. Model matrix — everything the tree sees, as plain numbers
 # ---------------------------------------------------------------------------
+# The feature TABLE's columns, split into two groups. Note this is a different
+# space from FEATURE_NAMES below, which names the columns of the encoded MATRIX
+# that to_matrix produces: stance_matchup is one nominal column here and expands
+# into stance_same / stance_unknown there. Conflating the two is an easy mistake
+# -- indexing the table by FEATURE_NAMES raises KeyError.
+#
+# Kept explicit so build_features.py can assert the table's shape rather than
+# infer it: a column in neither list is an accident.
+METADATA_NAMES = [
+    "Fight_URL",
+    "Event_Date",
+    "Weight_Class",
+    "fighter_A",
+    "fighter_B",
+    "fighter_A_url",
+    "fighter_B_url",
+    "a_is_f1",
+    "Method",
+    "End_Round",
+]
+
+FEATURE_TABLE_COLS = [
+    "reach_diff",
+    "height_diff",
+    "age_diff",
+    "reach_diff_missing",
+    "height_diff_missing",
+    "age_diff_missing",
+    "stance_matchup",
+]
+
 FEATURE_NAMES = [
     "reach_diff",
     "height_diff",
