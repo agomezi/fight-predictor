@@ -32,16 +32,37 @@ Chronological split: train 1994–2023 (6,888 fights), test 2023–2026 (1,512).
 |---|---|---|
 | Baseline (majority class) | — | 0.5026 |
 | Decision tree, unpruned | 0.9936 | 0.5403 |
-| Decision tree, pruned | 0.5769 | 0.5840 |
+| Decision tree, pruned — depth chosen on validation | 0.5769 | 0.5840 |
+| Decision tree, fixed depth 4 | — | 0.5952 |
 | Random forest (200 trees) | 0.6109 | 0.5972 |
 
 The unpruned tree is the point of the exercise, not an embarrassment: it
-memorises 99.4% of the training set and lands 13 points *below* the pruned tree
-on unseen fights. Pruning costs 42 points of training accuracy and buys 4.4
-points of real accuracy.
+memorises 99.4% of the training set and still lands 4.4 points *below* the
+pruned tree on unseen fights. Pruning gives up 42 points of training accuracy
+to buy those 4.4 points of real accuracy.
+
+Two pruned trees are listed because they answer different questions. The 0.5840
+row is the honest one — its `max_depth` was selected on a chronological
+validation split carved out of the training window, never on the test set. The
+0.5952 row is a hardcoded depth-4 tree, kept only because it is the reference
+the forest was originally compared against.
+
+That the hardcoded depth comes out 1.1 points ahead of the selected one is
+itself a finding rather than a bug: the gap sits inside the same confidence
+interval discussed below, which is what noise-dominated hyperparameter selection
+looks like. Choosing `max_depth` on ~1,400 validation rows, at a signal strength
+where the best available split is worth about 0.01 bits, is not a reliable
+procedure. Distinguishing the two properly needs the evaluation harness that
+does not exist yet — bootstrap intervals and walk-forward folds instead of a
+single held-out tail.
 
 A 1,512-fight test set carries roughly a ±2.5 point confidence interval, so the
-forest's +0.002 edge over a matched single tree is **not** a real difference.
+forest's +0.002 over the depth-4 tree is **not** a real difference. That
+comparison is also confounded: the depth-4 tree differs from the forest in both
+pruning and ensembling. `scripts/train_forest.py` therefore also reports a tree
+using the forest's own pruning settings with every feature visible, which is the
+comparison that isolates what bagging plus feature subsampling actually buys.
+
 With only 8 features and ~3 sampled per node, many trees in the ensemble draw a
 feature subset that is mostly missingness indicators. Features, not model
 choice, are the binding constraint here.
