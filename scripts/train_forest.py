@@ -2,8 +2,12 @@
 
 Same chronological split as scripts/train_tree.py, so the numbers are directly
 comparable. Reports:
-  * baseline, tuned single tree, forest — test accuracy side by side
-  * OOB accuracy vs chronological test accuracy (the gap is the point)
+  * baseline, two single-tree references, forest — test accuracy side by side.
+    The two references are deliberate: a hardcoded depth-4 tree (what earlier
+    numbers were quoted against) and a tree matching the forest's own pruning
+    settings. Only the second isolates what the ensemble actually buys.
+  * OOB accuracy vs chronological test accuracy, including the SIGN of the gap,
+    which here runs opposite to the textbook expectation
   * a sweep over n_trees, to show accuracy flattening rather than overfitting
   * feature importances aggregated across the forest
 
@@ -49,10 +53,28 @@ def main() -> None:
     print(f"features     : {len(FEATURE_NAMES)}")
     print(f"baseline test accuracy: {baseline:.4f}")
 
-    # Reference point: the pruned single tree from part 3.
-    tree = DecisionTree(max_depth=4, min_samples_split=50,
-                        min_samples_leaf=25).fit(X_train, y_train)
-    print(f"single pruned tree    : {tree.score(X_test, y_test):.4f}")
+    # Two single-tree reference points, because they answer different
+    # questions and conflating them is how the forest's edge gets misread.
+    #
+    # 1. FIXED-DEPTH tree. NOT the part-3 pruned tree: part 3 selects max_depth
+    #    on a chronological validation split, and lands on a different depth.
+    #    This one is a hardcoded depth-4 tree, kept because the earlier numbers
+    #    were reported against it. It is not a tuned model and should not be
+    #    quoted as one.
+    fixed_tree = DecisionTree(max_depth=4, min_samples_split=50,
+                              min_samples_leaf=25).fit(X_train, y_train)
+    print(f"single tree, depth 4 (fixed) : {fixed_tree.score(X_test, y_test):.4f}")
+
+    # 2. CONFIGURATION-MATCHED tree: identical pruning settings to the trees
+    #    inside the forest, but seeing every feature at every node instead of a
+    #    random subset. This is the comparison that actually isolates what the
+    #    ensemble buys, since it holds tree shape fixed and varies only bagging
+    #    plus feature subsampling. The fixed-depth tree above differs from the
+    #    forest in BOTH pruning and ensembling, so any gap against it is
+    #    confounded.
+    matched_tree = DecisionTree(max_depth=12, min_samples_split=10,
+                                min_samples_leaf=5).fit(X_train, y_train)
+    print(f"single tree, forest config   : {matched_tree.score(X_test, y_test):.4f}")
 
     print("\n" + "=" * 78)
     print("RANDOM FOREST")
@@ -72,10 +94,20 @@ def main() -> None:
     print(f"OOB   accuracy: {forest.oob_score_:.4f}" if forest.oob_score_
           else "OOB   accuracy: n/a")
     if forest.oob_score_:
-        print(f"OOB minus test: {forest.oob_score_ - test_acc:+.4f}  "
-              "(OOB is a random split; test is chronological)")
-    print(f"vs single tree: {test_acc - tree.score(X_test, y_test):+.4f}")
-    print(f"vs baseline   : {test_acc - baseline:+.4f}")
+        gap = forest.oob_score_ - test_acc
+        print(f"OOB minus test: {gap:+.4f}")
+        if gap < 0:
+            print("                OOB reads LOW. A random-split estimate normally")
+            print("                flatters you, so the sign is informative: the")
+            print("                1994- training pool is harder than the 2023-2026")
+            print("                test window. See _compute_oob_score's docstring.")
+        else:
+            print("                OOB is a random split; test is chronological.")
+    print(f"vs single tree, depth 4      : "
+          f"{test_acc - fixed_tree.score(X_test, y_test):+.4f}  (confounded)")
+    print(f"vs single tree, forest config: "
+          f"{test_acc - matched_tree.score(X_test, y_test):+.4f}  <- the real ensemble effect")
+    print(f"vs baseline                  : {test_acc - baseline:+.4f}")
 
     print("\n" + "=" * 78)
     print("n_trees SWEEP — accuracy flattens, it does not degrade")
