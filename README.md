@@ -69,11 +69,24 @@ bagging plus feature subsampling is a real, measurable improvement, not noise.
 The catch is that the matched tree lands *below* the pruned single tree (0.5549
 vs 0.5840): letting one unbagged tree grow to the forest's looser depth
 overfits, and the ensemble's +4.2 points is largely undoing that self-inflicted
-damage rather than beating the best single tree, which it only edges by +1.3.
+damage rather than beating the best single tree. Against the *best-scoring*
+single tree — the fixed depth-4 tree at 0.5952 — the forest is **+0.2 points
+(0.5972 vs 0.5952)**, which is squarely inside the ±2.5 interval and therefore
+noise. So the honest one-line answer to "does the forest beat your best tree?"
+is: not on accuracy.
+
+Where the ensemble does earn its keep is on the *probabilities*, which accuracy
+never showed. Scored by log loss (`scripts/evaluate_models.py`), the matched
+tree is **1.87** — nearly three times the 0.693 coin-flip reference, because its
+pure leaves emit confident 0/1 predictions that are often wrong. The forest
+averages 200 such trees down to **0.674**, beating the reference and calibrating
+cleanly across every bin. Bagging's real product here is not a higher hit rate;
+it is a usable probability instead of a wildly overconfident one.
+
 With only 8 features and ~3 sampled per node, many trees in the ensemble draw a
 feature subset that is mostly missingness indicators. So features remain the
-binding constraint on the *ceiling* — but, corrected for the confound, model
-choice is not free money left on the table either.
+binding constraint on the accuracy *ceiling* — the forest's calibration win
+does not move the hit rate, and that is exactly the point.
 
 ### Out-of-bag scoring reads *pessimistic* here
 
