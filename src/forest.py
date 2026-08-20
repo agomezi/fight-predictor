@@ -172,6 +172,26 @@ class RandomForest:
         votes = np.array([t.predict(X) for t in self.trees_], dtype=int)
         return majority_vote(votes)
 
+    def predict_proba(self, X):
+        """Mean of the trees' leaf probabilities — soft voting.
+
+        Note this is a DIFFERENT rule from predict(), which hard-votes: each
+        tree collapses to a class first and the classes are counted. Averaging
+        probabilities instead lets a tree that is 0.95 confident outweigh one
+        that is 0.51, so predict() and (predict_proba() > 0.5) can disagree on
+        a minority of rows. Neither is wrong; soft voting is the better
+        probability estimate and is what the evaluation harness scores, while
+        hard voting is what the accuracy figures in the README were computed
+        from. Do not silently swap one for the other.
+
+        Averaging also fixes the coarseness of a single tree's probabilities:
+        one depth-12 tree emits at most a few thousand distinct values, but 200
+        of them averaged produce a smooth distribution, which is why the
+        forest's calibration curve looks far better behaved than a tree's.
+        """
+        X = np.asarray(X, dtype=float)
+        return np.mean([t.predict_proba(X) for t in self.trees_], axis=0)
+
     def score(self, X, y):
         return float(np.mean(self.predict(X) == np.asarray(y)))
 
