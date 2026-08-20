@@ -34,6 +34,7 @@ Chronological split: train 1994–2023 (6,888 fights), test 2023–2026 (1,512).
 | Decision tree, unpruned | 0.9936 | 0.5403 |
 | Decision tree, pruned — depth chosen on validation | 0.5769 | 0.5840 |
 | Decision tree, fixed depth 4 | — | 0.5952 |
+| Decision tree, forest config (all features, matched pruning) | — | 0.5549 |
 | Random forest (200 trees) | 0.6109 | 0.5972 |
 
 The unpruned tree is the point of the exercise, not an embarrassment: it
@@ -57,15 +58,22 @@ does not exist yet — bootstrap intervals and walk-forward folds instead of a
 single held-out tail.
 
 A 1,512-fight test set carries roughly a ±2.5 point confidence interval, so the
-forest's +0.002 over the depth-4 tree is **not** a real difference. That
-comparison is also confounded: the depth-4 tree differs from the forest in both
-pruning and ensembling. `scripts/train_forest.py` therefore also reports a tree
-using the forest's own pruning settings with every feature visible, which is the
-comparison that isolates what bagging plus feature subsampling actually buys.
+forest's +0.002 over the depth-4 tree is **not** a real difference. But that
+comparison is confounded — the depth-4 tree differs from the forest in both
+pruning and ensembling, so it cannot isolate what the ensemble buys. The honest
+comparison is against a single tree with the forest's own pruning settings and
+every feature visible (the 0.5549 row). Against that, the forest gains
+**+4.2 points** (0.5972 vs 0.5549), comfortably outside the ±2.5 interval: here
+bagging plus feature subsampling is a real, measurable improvement, not noise.
 
+The catch is that the matched tree lands *below* the pruned single tree (0.5549
+vs 0.5840): letting one unbagged tree grow to the forest's looser depth
+overfits, and the ensemble's +4.2 points is largely undoing that self-inflicted
+damage rather than beating the best single tree, which it only edges by +1.3.
 With only 8 features and ~3 sampled per node, many trees in the ensemble draw a
-feature subset that is mostly missingness indicators. Features, not model
-choice, are the binding constraint here.
+feature subset that is mostly missingness indicators. So features remain the
+binding constraint on the *ceiling* — but, corrected for the confound, model
+choice is not free money left on the table either.
 
 ### Out-of-bag scoring reads *pessimistic* here
 
