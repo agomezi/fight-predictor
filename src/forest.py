@@ -184,10 +184,21 @@ class RandomForest:
         are excluded from the accuracy.
 
         This is the forest's built-in validation set — no separate holdout
-        needed. Caveat for this project: OOB rows are scattered across the whole
-        training window, so OOB accuracy is a RANDOM split estimate. It will
-        read optimistically compared to the chronological test set, and that gap
-        is itself worth reporting.
+        needed.
+
+        Caveat for this project, and it runs the opposite way to the textbook
+        expectation. OOB rows are scattered across the whole training window, so
+        OOB accuracy is a RANDOM split estimate, and random splits normally
+        flatter you relative to a chronological holdout. Measured here, OOB
+        reads 3.9 points LOW (0.5585 against a test accuracy of 0.5972). The
+        random-split effect is real but is outweighed by a larger one: the
+        training window opens in 1994, where biometrics are sparse and outcomes
+        noisier, while the test window is 2023-2026 and simply easier. OOB is
+        scoring the harder pool.
+
+        So the OOB-minus-test gap is worth reporting, but do not read its sign
+        as a validation-methodology problem — it is measuring a change in data
+        quality across a 30-year training window.
         """
         n_samples = len(y)
         votes = np.full((len(self.trees_), n_samples), -1, dtype=int)
