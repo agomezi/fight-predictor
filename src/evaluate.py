@@ -168,17 +168,20 @@ def bootstrap_ci(y_true, p, metric_fn, n_boot=2000, alpha=0.05, rng=None):
         handling.
       * Percentile bounds come from the resample distribution via
         np.percentile at alpha/2 and 1 - alpha/2.
-
-    TODO(human): implement the resample loop.
-        Draw n_boot resamples of n indices with replacement; for each, evaluate
-        metric_fn on the resampled y_true and p; collect the values; return the
-        original-data metric with the alpha/2 and 1-alpha/2 percentiles of the
-        collected distribution.
     """
-    raise NotImplementedError(
-        "bootstrap_ci is a TODO(human) -- see the docstring above for the "
-        "resample loop, and the edge cases that make it easy to get wrong."
-    )
+    y_true = np.asarray(y_true)
+    p = np.asarray(p)
+    n = len(y_true)
+    if rng is None:
+        rng = np.random.default_rng()
+
+    point = metric_fn(y_true, p)
+    boot = np.empty(n_boot, dtype=float)
+    for i in range(n_boot):
+        idx = rng.integers(0, n, size=n)
+        boot[i] = metric_fn(y_true[idx], p[idx])
+    lo, hi = np.percentile(boot, [100 * alpha / 2, 100 *(1 - alpha / 2)])
+    return float(point), float(lo), float(hi)
 
 
 def ci_half_width(lo, hi):
@@ -248,15 +251,34 @@ def walk_forward_folds(dates, n_folds=8, min_train_frac=0.5):
       * A fold whose test window comes out empty (possible when many rows share
         few distinct dates) must be skipped or raise, not yielded.
 
-    TODO(human): implement the fold generator.
-        Choose expanding or sliding; place n_folds cutoffs across the dates
-        after the min_train_frac point; snap each cutoff to a date boundary; and
-        yield the index arrays for each (train, test) pair.
+    This implementation uses an EXPANDING window: each fold trains on every
+    fight before its cutoff (`dates < c_start`), so the training set grows every
+    fold. Chosen over a sliding window because the dataset is not large and the
+    extra history outweighs the era-mixing cost — see the trade-off above.
     """
-    raise NotImplementedError(
-        "walk_forward_folds is a TODO(human) -- see the docstring above for "
-        "the date-boundary requirement and the expanding/sliding choice."
-    )
+    dates = np.asarray(dates)
+    if not np.all(dates[:-1] <= dates[1:]):
+        raise ValueError("dates must be sorted ascending before folding")
+    unique_dates = np.unique(dates)
+    final = unique_dates[-1]
+
+    # Skip the first min_train_frac of distinct dates, then place n_folds+1
+    # evenly-spaced cutoffs from there to the final date. Consecutive cutoffs
+    # bound each fold's test window; the last one is the final date so the most
+    # recent fights are tested.
+    start = int(np.ceil(min_train_frac * len(unique_dates)))
+    positions = np.unique(np.linspace(start, len(unique_dates) - 1, n_folds + 1).astype(int))
+    cutoffs = unique_dates[positions]
+
+    for c_start, c_end in zip(cutoffs[:-1], cutoffs[1:]):
+        train_idx = np.flatnonzero(dates < c_start)
+        if c_end == final:
+            test_idx = np.flatnonzero(dates >= c_start)          # last fold: to the end
+        else:
+            test_idx = np.flatnonzero((dates >= c_start) & (dates < c_end))
+        if len(train_idx) == 0 or len(test_idx) == 0:
+            continue
+        yield train_idx, test_idx 
 
 
 def run_walk_forward(fit_fn, X, y, dates, n_folds=8, min_train_frac=0.5):

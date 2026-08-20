@@ -7,10 +7,10 @@ way test_tree.py checks the fast split sweep against a naive reference: an
 independent implementation is the only thing that catches a formula that is
 self-consistently wrong.
 
-The bootstrap and the fold generator are TODO(human), so their checks report as
-SKIP until they are implemented, and then start enforcing the invariants that
-actually matter -- pairing, ordering, and date boundaries. They are written
-first on purpose: they are the specification.
+The bootstrap and the fold generator carry the invariants that actually matter
+-- pairing, ordering, and date boundaries -- as executable checks. (They still
+degrade to SKIP if either function is left unimplemented, so the suite runs
+either way.)
 
 Run from the repo root (venv active):
     python scripts/test_evaluate.py
@@ -111,7 +111,7 @@ check("reliability_table keeps p == 1.0",
 
 print()
 print("=" * 78)
-print("BOOTSTRAP  (TODO(human) in src/evaluate.py)")
+print("BOOTSTRAP")
 print("=" * 78)
 try:
     point, lo, hi = bootstrap_ci(y, p, brier_score, n_boot=500,
@@ -146,7 +146,7 @@ except NotImplementedError:
 
 print()
 print("=" * 78)
-print("WALK-FORWARD FOLDS  (TODO(human) in src/evaluate.py)")
+print("WALK-FORWARD FOLDS")
 print("=" * 78)
 # 400 rows over 40 event dates, 10 fights per card -- so a row-index cut would
 # land mid-card and a date-boundary cut cannot.
@@ -188,6 +188,6 @@ if failures:
 if skipped:
     print(f"All implemented checks pass. {len(skipped)} group(s) skipped: "
           f"{', '.join(skipped)}")
-    print("Fill the TODO(human) blocks in src/evaluate.py to enable them.")
+    print("A skipped group means its function is unimplemented in src/evaluate.py.")
 else:
     print("All evaluation checks pass.")

@@ -8,9 +8,9 @@ the same three the README lists, so the numbers line up directly:
     forest-config tree      forest pruning, all features -- the matched baseline
     random forest           200 trees
 
-The bootstrap and walk-forward sections depend on the TODO(human) blocks in
-src/evaluate.py and are skipped with a message until those are filled, so this
-script is useful before they are.
+Reports proper scoring rules with bootstrap confidence intervals, a calibration
+table, and a walk-forward fold breakdown so a result can be checked for whether
+it holds across eras rather than in one window.
 
 Run from the repo root (venv active):
     python scripts/evaluate_models.py
@@ -164,9 +164,8 @@ def main() -> None:
 
     rule("THE QUESTION THIS EXISTS TO ANSWER")
     print("Does the forest's +4.2 points over the matched single tree survive")
-    print("walk-forward, or was it an artifact of one 2023-2026 window?")
-    print("Fill the two TODO(human) blocks in src/evaluate.py and this script")
-    print("answers it.")
+    print("walk-forward, or was it an artifact of one 2023-2026 window? Read the")
+    print("per-fold table above against the fold-to-fold standard deviation.")
 
 
 if __name__ == "__main__":

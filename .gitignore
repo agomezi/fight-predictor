@@ -20,3 +20,13 @@ kaggle.json
 .DS_Store
 .idea/
 .vscode/
+
+# Working notes & cross-session handoffs — not part of the public repo
+CLAUDE.md
+NOTES.md
+HANDOFF*.md
+HANDBACK*.md
+Handoff*.md
+REPLYING.md
+STEP-*.md
+Travel area.md
