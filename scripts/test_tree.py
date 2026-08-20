@@ -175,6 +175,28 @@ check("predict() is consistent with the fitted tree",
       np.array_equal(predict(tree.root, X), tree.predict(X)))
 check("tree_depth matches the wrapper property", tree_depth(tree.root) == tree.depth)
 
+# --- 6. leaf probabilities ------------------------------------------------
+# proba must be a real probability everywhere.
+for name, arr in (("signal", y), ("noise", y_noise)):
+    t6 = DecisionTree(max_depth=4, min_samples_leaf=5).fit(X, arr)
+    pr = t6.predict_proba(X)
+    check(f"predict_proba in [0, 1] ({name})",
+          bool(np.all(pr >= 0.0) and np.all(pr <= 1.0)))
+    # The hard prediction is the STRICT threshold, because _majority_class
+    # breaks a tie toward 0. Using >= would flip every 50/50 leaf to class 1.
+    check(f"predict() == (predict_proba() > 0.5) ({name})",
+          np.array_equal(t6.predict(X), (pr > 0.5).astype(int)))
+    # A tree can emit at most one distinct probability per leaf.
+    check(f"distinct probabilities <= n_leaves ({name})",
+          len(np.unique(pr)) <= t6.n_leaves,
+          f"({len(np.unique(pr))} distinct, {t6.n_leaves} leaves)")
+
+# Pin the tie convention directly: force a single leaf over balanced labels.
+y_tied = np.array([0, 1] * 20)
+tied = DecisionTree(min_samples_split=len(y_tied) + 1).fit(X[:40], y_tied)
+check("50/50 leaf: proba is 0.5 and prediction is 0",
+      tied.predict_proba(X[:40])[0] == 0.5 and tied.predict(X[:40])[0] == 0)
+
 # --------------------------------------------------------------------------
 print()
 if failures:

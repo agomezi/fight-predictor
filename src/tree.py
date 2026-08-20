@@ -201,7 +201,7 @@ class Node:
     """
 
     def __init__(self, feature=None, threshold=None, left=None, right=None,
-                 prediction=None, n_samples=0, gain=0.0):
+                 prediction=None, n_samples=0, gain=0.0, proba=None):
         self.feature = feature        # column index to split on
         self.threshold = threshold    # split point: <= goes left
         self.left = left              # Node
@@ -209,6 +209,11 @@ class Node:
         self.prediction = prediction  # class label if leaf, else None
         self.n_samples = n_samples    # training rows that reached this node
         self.gain = gain              # information gain of this node's split
+        # Leaf only: fraction of training rows here with label 1, i.e. the
+        # leaf's estimate of P(y=1). `prediction` collapses this to a hard
+        # class and throws the confidence away; scoring calibration needs the
+        # number itself. None on internal nodes.
+        self.proba = proba
 
     def is_leaf(self):
         return self.prediction is not None
@@ -221,6 +226,23 @@ def _majority_class(y):
     """Most common label; ties break toward the smaller label value."""
     values, counts = np.unique(y, return_counts=True)
     return values[np.argmax(counts)]
+
+
+def _positive_fraction(y):
+    """Fraction of labels equal to 1 — the leaf's estimate of P(y=1).
+
+    Binary labels only, which build_tree already guarantees via best_split.
+    An empty array cannot reach here (every leaf holds at least one row).
+
+    Note the relationship to _majority_class, because it is a real trap: a
+    50/50 leaf has a positive fraction of exactly 0.5, and _majority_class
+    returns 0 for it (np.unique sorts, argmax takes the first maximum). So the
+    hard prediction is reproduced by `proba > 0.5`, NOT by `proba >= 0.5` —
+    the latter flips every tied leaf to class 1 and would quietly move the
+    reported accuracy. scripts/test_tree.py asserts the `>` form.
+    """
+    y = np.asarray(y)
+    return float(np.count_nonzero(y == 1) / len(y))
 
 
 def build_tree(X, y, depth=0, max_depth=None, min_samples_split=2,
@@ -259,7 +281,8 @@ def build_tree(X, y, depth=0, max_depth=None, min_samples_split=2,
         or n_samples < min_samples_split
         or len(np.unique(y)) == 1
     ):
-        return Node(prediction=_majority_class(y), n_samples=n_samples)
+        return Node(prediction=_majority_class(y), n_samples=n_samples,
+                    proba=_positive_fraction(y))
 
     if feature_subset is None:
         feature_indices = None
@@ -276,14 +299,16 @@ def build_tree(X, y, depth=0, max_depth=None, min_samples_split=2,
     # No split beat zero gain (constant features, or every legal cut is
     # uninformative) -> this node is as good as it gets.
     if feature is None:
-        return Node(prediction=_majority_class(y), n_samples=n_samples)
+        return Node(prediction=_majority_class(y), n_samples=n_samples,
+                    proba=_positive_fraction(y))
 
     go_left = X[:, feature] <= threshold
     # Belt-and-braces: best_split already guarantees both children are
     # non-empty, so an empty side would mean a threshold/partition mismatch.
     # Becoming a leaf here is strictly better than recursing forever.
     if not go_left.any() or go_left.all():
-        return Node(prediction=_majority_class(y), n_samples=n_samples)
+        return Node(prediction=_majority_class(y), n_samples=n_samples,
+                    proba=_positive_fraction(y))
 
     left = build_tree(
         X[go_left], y[go_left], depth + 1, max_depth, min_samples_split,
@@ -307,6 +332,29 @@ def predict_one(node, row):
 def predict(root, X):
     """Predict labels for every row of X."""
     return np.array([predict_one(root, row) for row in X])
+
+
+def predict_proba_one(node, row):
+    """Walk one sample to a leaf and return that leaf's P(y=1)."""
+    while not node.is_leaf():
+        node = node.left if row[node.feature] <= node.threshold else node.right
+    return node.proba
+
+
+def predict_proba(root, X):
+    """P(y=1) for every row of X, as a float array.
+
+    This is what the evaluation harness scores. Accuracy only asks whether the
+    hard class was right, so a model that is correct at 0.51 and one correct at
+    0.95 are indistinguishable to it; log loss and the Brier score read this
+    array instead and separate them.
+
+    A single tree's probabilities are coarse by construction — there are only
+    as many distinct values as there are leaves, and a depth-4 tree has at most
+    16. Expect visibly step-shaped calibration curves from one tree and much
+    smoother ones from the forest, which averages many leaves together.
+    """
+    return np.array([predict_proba_one(root, row) for row in X], dtype=float)
 
 
 def tree_depth(node):
@@ -355,6 +403,10 @@ class DecisionTree:
 
     def predict(self, X):
         return predict(self.root, np.asarray(X, dtype=float))
+
+    def predict_proba(self, X):
+        """P(y=1) per row. See module-level predict_proba for the caveats."""
+        return predict_proba(self.root, np.asarray(X, dtype=float))
 
     def score(self, X, y):
         return float(np.mean(self.predict(X) == np.asarray(y)))
