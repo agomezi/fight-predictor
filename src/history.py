@@ -297,6 +297,55 @@ def _sum_or_nan(frame: pd.DataFrame, column: str) -> float:
     return float(np.nansum(frame[column].to_numpy(dtype=float)))
 
 
+def _rate_basis(frame: pd.DataFrame, column: str,
+                seconds_column: str = "fight_secs"):
+    """Sum a stat and the seconds from THE SAME rows that carry that stat.
+
+    This exists because of a specific, silent dilution. Summing the numerator
+    with nansum (which skips rows lacking the stat) while summing the
+    denominator over every row gives
+
+        strikes from 3 fights / minutes from 5 fights
+
+    for a fighter with three stat-bearing bouts and two without -- a rate
+    understated by about 40%, with no error and no warning. It would hit exactly
+    the fighters a data refresh is meant to help, because results-only sources
+    (Wikipedia) supply the result and the duration but not the strike counts.
+
+    Restricting both sums to the same subset is the fix: the rate then describes
+    the fights it was actually measured over. A fighter with NO stat-bearing
+    past fight gets NaN -- unknown -- which the missing-flag machinery already
+    handles, rather than a number diluted toward zero.
+
+    Returns (stat_sum, seconds_sum), both NaN when nothing qualifies.
+    """
+    if column not in frame.columns or seconds_column not in frame.columns:
+        return np.nan, np.nan
+    stat = frame[column].to_numpy(dtype=float)
+    secs = frame[seconds_column].to_numpy(dtype=float)
+    # A row counts only if the stat AND a usable duration are both present.
+    usable = np.isfinite(stat) & np.isfinite(secs) & (secs > 0.0)
+    if not usable.any():
+        return np.nan, np.nan
+    return float(stat[usable].sum()), float(secs[usable].sum())
+
+
+def _per_minute(frame, column, per_seconds=60.0):
+    """Stat per `per_seconds` of cage time, measured over matching rows only."""
+    stat, secs = _rate_basis(frame, column)
+    if not np.isfinite(stat) or not np.isfinite(secs) or secs <= 0.0:
+        return np.nan
+    return stat / (secs / per_seconds)
+
+
+def _fraction_of_time(frame, column):
+    """Share of cage time, measured over matching rows only."""
+    stat, secs = _rate_basis(frame, column)
+    if not np.isfinite(stat) or not np.isfinite(secs) or secs <= 0.0:
+        return np.nan
+    return stat / secs
+
+
 def features_as_of(index: "HistoryIndex", fighter_url: str, as_of_date,
                    weight_class=None, priors: dict = None,
                    elo_ratings: dict = None) -> dict:
@@ -368,13 +417,15 @@ def features_as_of(index: "HistoryIndex", fighter_url: str, as_of_date,
         td_landed_p15m = sub_att_p15m = ctrl_frac = np.nan
         total_fight_secs = np.nan if not np.isfinite(total_secs) else total_secs
     else:
-        minutes = total_secs / 60.0
-        windows_15m = total_secs / SECS_PER_15M
-        sig_landed_pm = _sum_or_nan(past, "own_Sig_Landed") / minutes
-        sig_absorbed_pm = _sum_or_nan(past, "opp_Sig_Landed") / minutes
-        td_landed_p15m = _sum_or_nan(past, "own_TD_Landed") / windows_15m
-        sub_att_p15m = _sum_or_nan(past, "own_Sub_Att") / windows_15m
-        ctrl_frac = _sum_or_nan(past, "own_Ctrl_Sec") / total_secs
+        # Each rate is computed over only the fights carrying that stat -- see
+        # _rate_basis. total_fight_secs deliberately stays summed over ALL past
+        # fights: it measures cage experience, and a results-only source still
+        # tells us how long a fight lasted even when it omits the strike counts.
+        sig_landed_pm = _per_minute(past, "own_Sig_Landed")
+        sig_absorbed_pm = _per_minute(past, "opp_Sig_Landed")
+        td_landed_p15m = _per_minute(past, "own_TD_Landed", SECS_PER_15M)
+        sub_att_p15m = _per_minute(past, "own_Sub_Att", SECS_PER_15M)
+        ctrl_frac = _fraction_of_time(past, "own_Ctrl_Sec")
         total_fight_secs = total_secs
 
     last_date = pd.Timestamp(past["Event_Date"].max())
