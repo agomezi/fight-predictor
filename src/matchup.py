@@ -176,6 +176,57 @@ def build_matchup_row(fighter_a_url: str, fighter_b_url: str, division,
     return row
 
 
+def feature_columns(with_rolling: bool = False) -> list:
+    """The model's column list, in the one order both paths must agree on."""
+    cols = list(FEATURE_NAMES)
+    if with_rolling:
+        cols += list(ROLLING_DIFF_NAMES)
+    return cols
+
+
+def build_training_matrix(features: pd.DataFrame, bios: "FighterBios",
+                          index=None, priors: dict = None,
+                          elo_index=None, columns=None):
+    """Build (X, y, columns) for historical fights through build_matchup_row.
+
+    The reason this lives here rather than in each script: training-matrix
+    construction was duplicated in predict_card.py and test_leakage.py, and two
+    copies of "how a training row is assembled" is the same skew risk that
+    build_matchup_row exists to remove -- one copy gaining a column, or a
+    different column order, would not fail any test.
+
+    Elo is the part that has to be per-row. `elo_index.for_fight(Fight_URL)`
+    gives each corner its rating going into THAT fight; a single global snapshot
+    would be correct for the most recent fight and wrong for every earlier one.
+    Passing elo_index=None leaves the elo_diff column present but inert, which
+    is what the model has been doing until now.
+
+    Args:
+        features: the feature table (needs Fight_URL, both fighter urls,
+            Weight_Class, Event_Date, label).
+        bios: FighterBios.
+        index: HistoryIndex, or None for static features only.
+        priors: from history.division_priors(); required when index is given.
+        elo_index: history.EloIndex, or None to leave Elo inert.
+        columns: explicit column order. Defaults to feature_columns(index is
+            not None).
+
+    Returns:
+        (X, y, columns) -- X float, y int, columns the list actually used.
+    """
+    cols = list(columns) if columns is not None else feature_columns(index is not None)
+    rows = []
+    for r in features.itertuples(index=False):
+        elo = elo_index.for_fight(r.Fight_URL) if elo_index is not None else None
+        rows.append(build_matchup_row(
+            r.fighter_A_url, r.fighter_B_url, r.Weight_Class, r.Event_Date,
+            bios, index=index, priors=priors, elo_ratings=elo,
+        ))
+    X = rows_to_matrix(rows, cols)
+    y = features["label"].to_numpy(dtype=int)
+    return X, y, cols
+
+
 def rows_to_matrix(rows, feature_names=None):
     """Stack matchup dicts into a matrix, in an explicit column order.
 
