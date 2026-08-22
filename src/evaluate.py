@@ -189,6 +189,68 @@ def ci_half_width(lo, hi):
     return (hi - lo) / 2.0
 
 
+def paired_bootstrap_ci(y_true, p_a, p_b, metric_fn, n_boot=2000, alpha=0.05,
+                        rng=None):
+    """Confidence interval for metric(A) - metric(B) on the SAME rows.
+
+    THE POINT, and why this is not just two intervals compared by eye. Both
+    models are scored on one test set, so their errors are correlated: a test
+    set that happens to be full of upsets makes BOTH models look bad. Comparing
+    two independent intervals throws that shared noise away and is far too
+    conservative -- overlapping intervals routinely hide a real difference.
+
+    Resampling the row indices ONCE per iteration and scoring both models on
+    the same resample cancels the shared component, leaving only the part that
+    actually distinguishes them. The resulting interval is materially tighter,
+    and it is the correct test for "did this feature pay?".
+
+    Args:
+        y_true: labels, length n.
+        p_a, p_b: each model's P(y=1), same length and row order as y_true.
+        metric_fn: (y_true, p) -> float.
+        n_boot, alpha, rng: as bootstrap_ci.
+
+    Returns:
+        (delta, lo, hi) for metric(A) - metric(B). An interval excluding zero
+        is evidence of a real difference; one containing zero is not evidence
+        of equivalence, only of insufficient resolution.
+    """
+    y_true = np.asarray(y_true)
+    p_a = np.asarray(p_a, dtype=float)
+    p_b = np.asarray(p_b, dtype=float)
+    if not (len(y_true) == len(p_a) == len(p_b)):
+        raise ValueError("y_true, p_a and p_b must be the same length and order")
+    if rng is None:
+        rng = np.random.default_rng()
+
+    n = len(y_true)
+    delta = metric_fn(y_true, p_a) - metric_fn(y_true, p_b)
+    boot = np.empty(n_boot, dtype=float)
+    for i in range(n_boot):
+        idx = rng.integers(0, n, size=n)
+        yb = y_true[idx]
+        # One index draw, both models. Drawing separately would reintroduce
+        # exactly the noise this function exists to cancel.
+        boot[i] = metric_fn(yb, p_a[idx]) - metric_fn(yb, p_b[idx])
+    lo, hi = np.percentile(boot, [100 * alpha / 2, 100 * (1 - alpha / 2)])
+    return float(delta), float(lo), float(hi)
+
+
+def delta_verdict(delta_ci, lower_is_better) -> str:
+    """Turn a paired interval into the sentence the discipline rule asks for.
+
+    Deliberately blunt, and only three outcomes. "inside noise" is not a
+    finding of equivalence -- it means this test set cannot resolve the
+    difference, which is usually the honest answer for a two-point move on
+    1,500 fights.
+    """
+    delta, lo, hi = delta_ci
+    if lo <= 0.0 <= hi:
+        return "inside noise"
+    improved = (delta < 0) if lower_is_better else (delta > 0)
+    return "REAL improvement" if improved else "REAL regression"
+
+
 def deltas_overlap(ci_a, ci_b):
     """True if two (point, lo, hi) intervals overlap.
 
