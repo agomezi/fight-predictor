@@ -22,6 +22,7 @@ Three things it does that a naive predictor would not:
 from __future__ import annotations
 
 import argparse
+import difflib
 import sys
 from pathlib import Path
 
@@ -153,7 +154,23 @@ def main() -> None:
                     help="add rolling + Elo features")
     ap.add_argument("--yes", "-y", action="store_true",
                     help="accept the top name suggestion without asking")
-    args = ap.parse_args()
+
+    # A misspelled flag ("--divsion") is the same class of miss as a misspelled
+    # fighter name, and deserves the same treatment. argparse's own
+    # suggest_on_error covers choices and subcommands but NOT unknown options,
+    # so parse leniently and do the suggesting here.
+    args, extras = ap.parse_known_args()
+    if extras:
+        known = sorted({opt for action in ap._actions
+                        for opt in action.option_strings})
+        for token in extras:
+            if not token.startswith("-"):
+                continue
+            near = difflib.get_close_matches(token, known, n=2, cutoff=0.5)
+            hint = f"  did you mean {' or '.join(near)}?" if near else ""
+            print(f"error: unknown option '{token}'{hint}", file=sys.stderr)
+        print(f"\navailable options: {' '.join(known)}", file=sys.stderr)
+        sys.exit(2)
 
     when = pd.Timestamp(args.date) if args.date else pd.Timestamp.today().normalize()
     features, _ = build_feature_table(seed=RANDOM_SEED)
