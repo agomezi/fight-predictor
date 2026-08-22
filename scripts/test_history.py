@@ -31,6 +31,7 @@ from src.data_loading import load_fights  # noqa: E402
 from src.features import build_feature_table  # noqa: E402
 from src.history import (  # noqa: E402
     AS_OF_FEATURES,
+    SECS_PER_15M,
     EloIndex,
     ELO_INITIAL,
     ELO_K,
@@ -91,7 +92,18 @@ for row in log.itertuples(index=False):
     # This fighter is corner 1 iff (they are side A) == (A is corner 1).
     own_is_f1 = (is_a == a_is_f1)
     expected_own = fight["F1_Sig_Landed"] if own_is_f1 else fight["F2_Sig_Landed"]
-    if not np.isclose(float(row.own_Sig_Landed), float(expected_own)):
+    got, want = float(row.own_Sig_Landed), float(expected_own)
+    # Results-only rows (Wikipedia refresh) carry no stats, and np.isclose is
+    # False for NaN vs NaN -- so comparing naively reports every such row as a
+    # mapping error. Absence must PROPAGATE (both NaN); presence must MATCH.
+    # This is the same NaN trap the leakage-test docstring warns about, and it
+    # was in this test until a refreshed dataset exposed it.
+    if np.isnan(want) or np.isnan(got):
+        if np.isnan(want) != np.isnan(got):
+            side_ok = False
+            break
+        continue
+    if not np.isclose(got, want):
         side_ok = False
         break
 check("own_/opp_ stats map to the correct corner", side_ok)
@@ -235,6 +247,72 @@ try:
           "(loose bound: drift would be gross, not subtle)")
 except NotImplementedError:
     skip("elo_update / run_elo checks", "not implemented yet")
+
+print()
+print("=" * 78)
+print("PARTIAL-STAT RATES — the dilution guard")
+print("=" * 78)
+# Real data currently has every stat on every row, so this bug is LATENT: it
+# would only appear once a results-only source (Wikipedia) contributes fights
+# that carry a result and a duration but no strike counts. That is exactly why
+# it needs a synthetic fixture -- there is nothing in the CSVs that exercises it,
+# and the leakage suite would never catch it because it is not a leak, it is a
+# quiet dilution toward zero.
+mixed = pd.DataFrame([
+    # Two stat-bearing fights: 300s each, 30 significant strikes each.
+    dict(fighter_url="u", opponent_url="o1", Fight_URL="f1",
+         Event_Date=pd.Timestamp("2020-01-01"), Weight_Class="Lightweight Bout",
+         won=1, is_finish=False, Method="Decision - Unanimous", End_Round=3,
+         fight_secs=300.0, own_Sig_Landed=30.0, opp_Sig_Landed=10.0,
+         own_TD_Landed=1.0, own_Sub_Att=0.0, own_Ctrl_Sec=60.0),
+    dict(fighter_url="u", opponent_url="o2", Fight_URL="f2",
+         Event_Date=pd.Timestamp("2020-06-01"), Weight_Class="Lightweight Bout",
+         won=1, is_finish=False, Method="Decision - Unanimous", End_Round=3,
+         fight_secs=300.0, own_Sig_Landed=30.0, opp_Sig_Landed=10.0,
+         own_TD_Landed=1.0, own_Sub_Att=0.0, own_Ctrl_Sec=60.0),
+    # Two results-only fights: duration known, stats absent.
+    dict(fighter_url="u", opponent_url="o3", Fight_URL="f3",
+         Event_Date=pd.Timestamp("2021-01-01"), Weight_Class="Lightweight Bout",
+         won=0, is_finish=False, Method="Decision - Unanimous", End_Round=3,
+         fight_secs=300.0, own_Sig_Landed=np.nan, opp_Sig_Landed=np.nan,
+         own_TD_Landed=np.nan, own_Sub_Att=np.nan, own_Ctrl_Sec=np.nan),
+    dict(fighter_url="u", opponent_url="o4", Fight_URL="f4",
+         Event_Date=pd.Timestamp("2021-06-01"), Weight_Class="Lightweight Bout",
+         won=1, is_finish=False, Method="Decision - Unanimous", End_Round=3,
+         fight_secs=300.0, own_Sig_Landed=np.nan, opp_Sig_Landed=np.nan,
+         own_TD_Landed=np.nan, own_Sub_Att=np.nan, own_Ctrl_Sec=np.nan),
+])
+mix_idx = HistoryIndex(mixed)
+mp = division_priors(mixed)
+mf = features_as_of(mix_idx, "u", pd.Timestamp("2022-01-01"), priors=mp)
+
+# 60 strikes over the 10 minutes that actually carried strike counts = 6.0/min.
+# Diluting by all four fights (20 minutes) would give 3.0 -- a 50% understatement.
+check("rate uses only the fights carrying the stat",
+      np.isclose(mf["sig_landed_pm"], 6.0),
+      f"(got {mf['sig_landed_pm']:.4f}; diluted would be 3.0000)")
+check("control fraction uses the matching subset",
+      np.isclose(mf["ctrl_frac"], 120.0 / 600.0),
+      f"(got {mf['ctrl_frac']:.4f}; diluted would be {120.0/1200.0:.4f})")
+check("takedown rate uses the matching subset",
+      np.isclose(mf["td_landed_p15m"], 2.0 / (600.0 / SECS_PER_15M)),
+      f"(got {mf['td_landed_p15m']:.4f})")
+# Cage experience is different: a results-only source still tells us how long
+# the fight lasted, so total_fight_secs SHOULD count all four.
+check("total_fight_secs still counts every past fight",
+      np.isclose(mf["total_fight_secs"], 1200.0),
+      f"(got {mf['total_fight_secs']:.0f} of 1200)")
+check("n_fights counts every past fight", mf["n_fights"] == 4)
+
+# A fighter whose every past fight lacks the stat must read unknown, not zero.
+only_results = mixed.iloc[2:].copy()
+of = features_as_of(HistoryIndex(only_results), "u",
+                    pd.Timestamp("2022-01-01"), priors=mp)
+check("no stat-bearing past fight gives NaN, not 0.0",
+      np.isnan(of["sig_landed_pm"]) and np.isnan(of["ctrl_frac"]),
+      "(0.0 strikes per minute is a real, terrible value)")
+check("but its results-based features still resolve",
+      of["n_fights"] == 2 and np.isfinite(of["win_rate"]))
 
 print()
 print("=" * 78)

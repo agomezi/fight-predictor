@@ -12,6 +12,7 @@ Filenames reflect what's actually in data/ (not the names in the build plan):
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
@@ -22,8 +23,18 @@ import pandas as pd
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = REPO_ROOT / "data"
 
-FIGHTS_CSV = DATA_DIR / "ufc_gold_dataset_final.csv"
-FIGHTERS_CSV = DATA_DIR / "ufc_fighters_final.csv"
+# Environment overrides exist so a CANDIDATE dataset can be put through the full
+# gate -- leakage, history, parity, evaluate -- before anything is adopted. Until
+# these existed, validating a refreshed CSV meant editing this file first, which
+# is exactly backwards: the edit is the adoption. Unset, behaviour is unchanged.
+#
+#   FIGHT_PREDICTOR_FIGHTS_CSV=data/ufc_gold_dataset_refreshed.csv \
+#   FIGHT_PREDICTOR_FIGHTERS_CSV=data/ufc_fighters_refreshed.csv \
+#       python scripts/test_leakage.py
+FIGHTS_CSV = Path(os.environ.get("FIGHT_PREDICTOR_FIGHTS_CSV",
+                                 DATA_DIR / "ufc_gold_dataset_final.csv"))
+FIGHTERS_CSV = Path(os.environ.get("FIGHT_PREDICTOR_FIGHTERS_CSV",
+                                   DATA_DIR / "ufc_fighters_final.csv"))
 
 
 # ---------------------------------------------------------------------------

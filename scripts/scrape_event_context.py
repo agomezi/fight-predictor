@@ -94,10 +94,21 @@ def parse_date(raw: str):
 
 
 def fetch(url: str) -> str:
-    """One polite request via curl. No credentials, no session, no cookies."""
+    """One polite request via curl. No credentials, no session, no cookies.
+
+    encoding is pinned to UTF-8 rather than left to the platform default.
+    text=True decodes with locale.getpreferredencoding(), which is cp1252 on
+    Windows -- and Wikipedia is UTF-8, so any page carrying an accented fighter
+    name (Prochazka, Blachowicz, Jedrzejczyk) raised UnicodeDecodeError and the
+    whole refresh died. Those are precisely the names refresh_data.canonicalise
+    exists to reconcile, so the failure hit exactly where it hurt most. errors
+    is "replace" so one malformed byte degrades a single character instead of
+    aborting a 21-event ingest.
+    """
     res = subprocess.run(
         ["curl", "-sL", "-m", "60", "-A", UA, url],
         capture_output=True, text=True, check=False,
+        encoding="utf-8", errors="replace",
     )
     if res.returncode != 0 or not res.stdout:
         raise RuntimeError(f"fetch failed (rc={res.returncode})")
