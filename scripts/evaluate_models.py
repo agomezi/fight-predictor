@@ -200,6 +200,11 @@ def main() -> None:
         # All already in the raw tables and never carried through. Symmetric
         # across corners, so they carry no directional signal alone and can only
         # pay via interactions -- measured, not assumed.
+        # Weight: the model had no weight feature at all, so it could see 14
+        # inches of reach and not the 78 lb that came with it.
+        ("+ rolling + weight",
+         dict(index=hist, priors=priors, elo_index=None,
+              columns=feature_columns(with_rolling=True, with_weight=True))),
         ("+ rolling + bout context",
          dict(index=hist, priors=priors, elo_index=None,
               columns=feature_columns(with_rolling=True, with_bout_context=True))),

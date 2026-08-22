@@ -103,6 +103,40 @@ def scheduled_rounds(time_format: object) -> float:
     return np.nan
 
 
+def cut_burden_diff(weight_a, weight_b, weight_class):
+    """How much further A is from the contracted weight than B, in lbs.
+
+    |weight_A - limit| - |weight_B - limit|.
+
+    THE ABSOLUTE VALUES ARE THE POINT, and the obvious signed version is worse
+    than useless. Written as (w_A - limit) - (w_B - limit) the limit cancels
+    algebraically, leaving exactly weight_diff -- verified on this data at
+    correlation 1.000000, max difference 0.0. That would add a perfectly
+    collinear duplicate column, which is the redundancy that retired elo_diff.
+
+    Taking each fighter's DISTANCE from the limit first breaks the
+    cancellation (correlation with weight_diff -0.30; the two disagree in sign
+    on 1,785 fights) and encodes what actually matters: a heavyweight forced to
+    make 170 carries an enormous burden while the natural welterweight opposite
+    him carries none.
+
+    It is also the only weight feature that responds to the bout's division.
+    weight_diff for Jones vs Makhachev is +78 whether the bout is contracted at
+    welterweight or heavyweight. cut_burden_diff is strongly positive at
+    welterweight (Jones far over the limit) and strongly negative at heavyweight
+    (Makhachev far under it) -- which is the behaviour a --division override
+    should produce.
+
+    NaN where the division has no standard limit: catchweight, open weight and
+    the early tournaments, 188 fights here. Correct -- there is no contracted
+    weight to be far from -- and the missing-flag path handles it.
+    """
+    limit = pd.Series(list(weight_class)).apply(estimate_class_lbs)
+    wa = pd.Series(list(weight_a), dtype=float)
+    wb = pd.Series(list(weight_b), dtype=float)
+    return ((wa - limit).abs() - (wb - limit).abs()).to_numpy()
+
+
 def estimate_class_lbs(weight_class: object) -> float:
     """Map a bout's weight-class string to an approximate limit in lbs.
 
@@ -234,6 +268,8 @@ def build_features(df: pd.DataFrame, seed: int = RANDOM_SEED) -> pd.DataFrame:
     b_dob = pick(df["F2_bio_DOB"], df["F1_bio_DOB"])
     a_stance = pick(df["F1_bio_Stance"], df["F2_bio_Stance"])
     b_stance = pick(df["F2_bio_Stance"], df["F1_bio_Stance"])
+    a_weight = pick(df["F1_bio_Weight_lbs"], df["F2_bio_Weight_lbs"])
+    b_weight = pick(df["F2_bio_Weight_lbs"], df["F1_bio_Weight_lbs"])
     a_name = pick(df["Fighter_1"], df["Fighter_2"])
 
     a_age = _age_years(a_dob, df["Event_Date"])
@@ -265,6 +301,13 @@ def build_features(df: pd.DataFrame, seed: int = RANDOM_SEED) -> pd.DataFrame:
         "is_womens_bout": [is_womens_bout(w) for w in df["Weight_Class"]],
         "is_nonstandard_weight": [is_nonstandard_weight(w) for w in df["Weight_Class"]],
         "scheduled_rounds": [scheduled_rounds(t) for t in df.get("Time_Format", pd.Series([None]*len(df)))],
+        # Size. Weight_lbs was in the bios all along but reached the model
+        # nowhere -- estimate_class_lbs used it only to disambiguate duplicate
+        # names. That left the model blind to a 78 lb gap while seeing the 14
+        # inches of reach that came with it, which is why a heavyweight cutting
+        # to welterweight scored as a coin flip.
+        "weight_diff": a_weight - b_weight,
+        "cut_burden_diff": cut_burden_diff(a_weight, b_weight, df["Weight_Class"]),
         # Symmetric matchup features -- the model-facing set is FEATURE_NAMES.
         "reach_diff": a_reach - b_reach,
         "height_diff": a_height - b_height,
@@ -277,7 +320,8 @@ def build_features(df: pd.DataFrame, seed: int = RANDOM_SEED) -> pd.DataFrame:
     # neutral "no known advantage") and keep a companion boolean recording that
     # the value was unknown, so the split code never has to handle NaN itself.
     # stance_matchup already carries its own "Unknown" category — left as-is.
-    for col in ("reach_diff", "height_diff", "age_diff"):
+    for col in ("reach_diff", "height_diff", "age_diff",
+                "weight_diff", "cut_burden_diff"):
         out[f"{col}_missing"] = out[col].isna()
         out[col] = out[col].fillna(0.0)
     # Same policy for the one bout-context numeric: flag the unknown formats
@@ -356,6 +400,10 @@ METADATA_NAMES = [
 ]
 
 FEATURE_TABLE_COLS = [
+    "weight_diff",
+    "weight_diff_missing",
+    "cut_burden_diff",
+    "cut_burden_diff_missing",
     "reach_diff",
     "height_diff",
     "age_diff",
@@ -385,6 +433,15 @@ FEATURE_NAMES = [
 # Opt-in group. FEATURE_NAMES is deliberately left alone so the v1 and v2
 # numbers already published keep meaning exactly what they meant; a caller that
 # wants bout context asks for it by name.
+# Opt-in, measured as its own variant. If it pays it should be promoted into
+# FEATURE_NAMES, since weight is a static fighter attribute exactly like reach.
+WEIGHT_NAMES = [
+    "weight_diff",
+    "weight_diff_missing",
+    "cut_burden_diff",
+    "cut_burden_diff_missing",
+]
+
 BOUT_CONTEXT_NAMES = [
     "is_title_bout",
     "is_womens_bout",

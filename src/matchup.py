@@ -39,9 +39,11 @@ from src.data_loading import load_fighters
 from src.features import (
     BOUT_CONTEXT_NAMES,
     FEATURE_NAMES,
+    WEIGHT_NAMES,
     WEIGHT_CLASS_LBS,
     _age_years,
     _stance_matchup,
+    cut_burden_diff as _cut_burden_diff,
     estimate_class_lbs,
     is_nonstandard_weight,
     is_title_bout,
@@ -176,6 +178,7 @@ class FighterBios:
         return {
             "height_in": row["Height_in"],
             "reach_in": row["Reach_in"],
+            "weight_lbs": row["Weight_lbs"],
             "stance": row["Stance"],
             "dob": row["DOB"],
         }
@@ -216,10 +219,18 @@ def build_matchup_row(fighter_a_url: str, fighter_b_url: str, division,
     a_age = _age_years(pd.Series([a["dob"]]), pd.Series([when])).iloc[0]
     b_age = _age_years(pd.Series([b["dob"]]), pd.Series([when])).iloc[0]
 
+    # cut_burden_diff is computed here through features.cut_burden_diff so the
+    # absolute-value form cannot drift between training and serving. It is the
+    # one weight feature that depends on the DIVISION, which is exactly why it
+    # has to come from the same function on both paths.
+    burden = float(_cut_burden_diff([a["weight_lbs"]], [b["weight_lbs"]],
+                                    [division])[0])
     diffs = {
         "reach_diff": a["reach_in"] - b["reach_in"],
         "height_diff": a["height_in"] - b["height_in"],
         "age_diff": a_age - b_age,
+        "weight_diff": a["weight_lbs"] - b["weight_lbs"],
+        "cut_burden_diff": burden,
     }
     # Bout context, derived from the same division string features.py uses, via
     # the same helpers -- not reimplemented, for the same reason ages are not.
@@ -275,13 +286,16 @@ def build_matchup_row(fighter_a_url: str, fighter_b_url: str, division,
 
 
 def feature_columns(with_rolling: bool = False,
-                    with_bout_context: bool = False) -> list:
+                    with_bout_context: bool = False,
+                    with_weight: bool = False) -> list:
     """The model's column list, in the one order both paths must agree on."""
     cols = list(FEATURE_NAMES)
     if with_rolling:
         cols += list(ROLLING_DIFF_NAMES)
     if with_bout_context:
         cols += list(BOUT_CONTEXT_NAMES)
+    if with_weight:
+        cols += list(WEIGHT_NAMES)
     return cols
 
 
