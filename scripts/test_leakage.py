@@ -38,6 +38,7 @@ from src.evaluate import accuracy, bootstrap_ci  # noqa: E402
 from src.features import FEATURE_NAMES, build_feature_table, to_matrix  # noqa: E402
 from src.forest import RandomForest  # noqa: E402
 from src.history import (  # noqa: E402
+    EloIndex,
     AS_OF_FEATURES,
     HistoryIndex,
     build_event_log,
@@ -45,6 +46,7 @@ from src.history import (  # noqa: E402
     features_as_of,
 )
 from src.matchup import (  # noqa: E402
+    build_training_matrix,
     ROLLING_DIFF_NAMES,
     FighterBios,
     build_matchup_row,
@@ -184,26 +186,26 @@ def test_fabricated_future():
 # ---------------------------------------------------------------------------
 # ANGLE 2
 # ---------------------------------------------------------------------------
-def _build_rolling_matrix():
+def _build_rolling_matrix(live_elo: bool = True):
     """Static + rolling feature matrix for every fight, plus labels and dates.
 
-    Built once and reused across the shuffle seeds. Elo is left at its initial
-    value here (elo_ratings=None): the control is about whether the ROLLING
-    RATE features can conjure signal from noise, and a constant column cannot.
+    Built through matchup.build_training_matrix, the same function training and
+    serving use, so the control is exercising the real code path rather than a
+    reimplementation of it.
+
+    live_elo=True threads a real per-fight EloIndex in. That matters for this
+    control specifically: Elo is derived from past RESULTS, which makes it the
+    feature most likely to smuggle label information, and a constant column
+    could never have failed the test. Now that it varies, the control has
+    something to catch.
     """
     features, _ = build_feature_table(seed=42)
     bios = FighterBios()
     idx = HistoryIndex(log)
+    elo_index = EloIndex(log) if live_elo else None
 
-    rows = [
-        build_matchup_row(r.fighter_A_url, r.fighter_B_url, r.Weight_Class,
-                          r.Event_Date, bios, index=idx, priors=priors)
-        for r in features.itertuples(index=False)
-    ]
-    x_static = rows_to_matrix(rows, FEATURE_NAMES)
-    x_roll = np.array([[r[n] for n in ROLLING_DIFF_NAMES] for r in rows], dtype=float)
-    X = np.hstack([x_static, x_roll])
-    y = features["label"].to_numpy(dtype=int)
+    X, y, _cols = build_training_matrix(features, bios, index=idx,
+                                        priors=priors, elo_index=elo_index)
     order = np.argsort(features["Event_Date"].to_numpy(), kind="mergesort")
     return X[order], y[order], features["Event_Date"].to_numpy()[order]
 

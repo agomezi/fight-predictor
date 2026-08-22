@@ -27,6 +27,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.evaluate import (  # noqa: E402
     METRICS,
+    delta_verdict,
+    paired_bootstrap_ci,
     accuracy,
     bootstrap_ci,
     brier_score,
@@ -43,6 +45,13 @@ from src.features import (  # noqa: E402
     to_matrix,
 )
 from src.forest import RandomForest  # noqa: E402
+from src.history import (  # noqa: E402
+    EloIndex,
+    HistoryIndex,
+    build_event_log,
+    division_priors,
+)
+from src.matchup import FighterBios, build_training_matrix  # noqa: E402
 from src.tree import DecisionTree  # noqa: E402
 
 RANDOM_SEED = 42
@@ -161,6 +170,78 @@ def main() -> None:
         print("distinguished them however clean it looked.")
     except NotImplementedError as exc:
         print(f"SKIPPED — {exc}")
+
+    # --- feature sets ----------------------------------------------------
+    # The model config is held fixed and the FEATURE SET is varied, which is
+    # the comparison every step of the accuracy work needs and which this
+    # script previously could not make at all.
+    rule("FEATURE SETS — does each layer earn its keep?")
+    print("Building the rolling matrices (features_as_of runs once per corner")
+    print("per fight, so this takes a minute on the full dataset)...")
+
+    bios = FighterBios()
+    log, log_info = build_event_log(seed=RANDOM_SEED)
+    hist, priors = HistoryIndex(log), division_priors(log)
+    elo_index = EloIndex(log)
+    if log_info["stats_missing"]:
+        print(f"  NOTE: stat columns absent from the raw table: "
+              f"{log_info['stats_missing']}")
+
+    variants = (
+        ("static only", dict(index=None, priors=None, elo_index=None)),
+        ("+ rolling form", dict(index=hist, priors=priors, elo_index=None)),
+        ("+ rolling + live Elo", dict(index=hist, priors=priors,
+                                      elo_index=elo_index)),
+    )
+
+    scored = []
+    for label, kw in variants:
+        Xtr, ytr, cols = build_training_matrix(train_df, bios, **kw)
+        Xte, yte, _ = build_training_matrix(test_df, bios, columns=cols, **kw)
+        model = RandomForest(
+            n_trees=200, max_depth=12, min_samples_split=10, min_samples_leaf=5,
+            feature_subset="sqrt", oob_score=False, random_state=RANDOM_SEED,
+        ).fit(Xtr, ytr)
+        p = np.asarray(model.predict_proba(Xte), dtype=float)
+        scored.append((label, cols, p, yte))
+
+    print(f"\n{'feature set':<24}{'cols':>6}{'accuracy':>10}{'log_loss':>10}{'brier':>9}")
+    for label, cols, p, yte in scored:
+        print(f"{label:<24}{len(cols):>6}{accuracy(yte, p):>10.4f}"
+              f"{log_loss(yte, p):>10.4f}{brier_score(yte, p):>9.4f}")
+
+    # elo_diff carried no information until EloIndex was threaded in; show that
+    # it is now a live column rather than asserting it.
+    for label, cols, _, _ in scored:
+        if "elo_diff" in cols:
+            Xtr, _, c2 = build_training_matrix(
+                train_df, bios,
+                **dict(variants[2][1] if "Elo" in label else variants[1][1]))
+            v = float(np.var(Xtr[:, c2.index("elo_diff")]))
+            print(f"  elo_diff variance, {label:<22} {v:>12.4f}"
+                  + ("   (inert)" if v == 0.0 else "   (live)"))
+
+    rule("PAIRED DIFFERENCES — the test the discipline rule asks for")
+    print("Same rows, same resample, both models. Cancels the shared test-set")
+    print("noise, so it resolves differences two separate intervals cannot.\n")
+    base_label, _, p_base, y_ref = scored[0]
+    for label, _, p, _ in scored[1:]:
+        print(f"{label}  vs  {base_label}")
+        for name, fn, lower_better in METRICS:
+            d = paired_bootstrap_ci(y_ref, p, p_base, fn, n_boot=N_BOOT,
+                                    rng=np.random.default_rng(RANDOM_SEED))
+            print(f"  {name:<9} {d[0]:+.4f}  [{d[1]:+.4f}, {d[2]:+.4f}]  "
+                  f"{delta_verdict(d, lower_better)}")
+        print()
+    # And the one STEP 1 actually asks: live Elo against rolling-without-Elo.
+    if len(scored) == 3:
+        print(f"{scored[2][0]}  vs  {scored[1][0]}   (the live-Elo question)")
+        for name, fn, lower_better in METRICS:
+            d = paired_bootstrap_ci(y_ref, scored[2][2], scored[1][2], fn,
+                                    n_boot=N_BOOT,
+                                    rng=np.random.default_rng(RANDOM_SEED))
+            print(f"  {name:<9} {d[0]:+.4f}  [{d[1]:+.4f}, {d[2]:+.4f}]  "
+                  f"{delta_verdict(d, lower_better)}")
 
     rule("THE QUESTION THIS EXISTS TO ANSWER")
     print("Does the forest's +4.2 points over the matched single tree survive")
