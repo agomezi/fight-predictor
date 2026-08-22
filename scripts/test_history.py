@@ -31,6 +31,7 @@ from src.data_loading import load_fights  # noqa: E402
 from src.features import build_feature_table  # noqa: E402
 from src.history import (  # noqa: E402
     AS_OF_FEATURES,
+    EloIndex,
     ELO_INITIAL,
     ELO_K,
     HistoryIndex,
@@ -206,8 +207,12 @@ try:
     # The sweep must record ratings BEFORE applying each result.
     elo = run_elo(log)
     check("run_elo yields one rating per (fighter, fight)", len(elo) == len(log))
-    firsts = elo.merge(log[["Fight_URL", "fighter_url", "Event_Date"]],
-                       on=["Fight_URL", "fighter_url"])
+    # run_elo now returns Event_Date itself, so merging the log's copy in would
+    # collide and pandas would silently suffix both to Event_Date_x/_y. Take
+    # only the join keys plus what is actually missing.
+    firsts = elo if "Event_Date" in elo.columns else elo.merge(
+        log[["Fight_URL", "fighter_url", "Event_Date"]],
+        on=["Fight_URL", "fighter_url"])
     # Restrict the debut check to fighters whose earliest fight was on a date
     # they fought only once. The early-UFC tournament cards put two fights for
     # the same fighter on one night, and run_elo correctly rates those
@@ -230,6 +235,64 @@ try:
           "(loose bound: drift would be gross, not subtle)")
 except NotImplementedError:
     skip("elo_update / run_elo checks", "not implemented yet")
+
+print()
+print("=" * 78)
+print("EloIndex — as-of rating lookup")
+print("=" * 78)
+ei = EloIndex(log)
+check("table carries both pre and post ratings",
+      {"elo_pre", "elo_post", "Event_Date"} <= set(ei.table.columns))
+check("one row per (fighter, fight)", len(ei.table) == len(log))
+
+# The chain: a fighter's post-fight rating must be exactly the pre-fight rating
+# they carry into their NEXT fight. If it is not, a rating is being lost or
+# recomputed between fights, and every downstream feature is subtly wrong.
+chain_ok, chain_checked = True, 0
+for url, grp in ei.table.sort_values("Event_Date", kind="mergesort").groupby("fighter_url"):
+    post = grp["elo_post"].to_numpy()[:-1]
+    nxt = grp["elo_pre"].to_numpy()[1:]
+    if len(post):
+        chain_checked += len(post)
+        if not np.allclose(post, nxt):
+            chain_ok = False
+check("elo_post chains into the next fight's elo_pre", chain_ok,
+      f"({chain_checked} consecutive pairs)")
+
+check("a fight's own result is not in its pre-fight rating",
+      bool(np.allclose(
+          ei.table.sort_values("Event_Date", kind="mergesort")
+                  .groupby("fighter_url")["elo_pre"].first().to_numpy(),
+          ELO_INITIAL)))
+check("every fight moves both ratings",
+      bool((ei.table["elo_pre"] != ei.table["elo_post"]).all()),
+      "(K > 0, so no exchange is a no-op)")
+
+f_any = str(log["Fight_URL"].iloc[0])
+check("for_fight returns both corners", len(ei.for_fight(f_any)) == 2)
+check("for_fight on an unknown fight is empty, not an error",
+      ei.for_fight("http://f/nope") == {})
+check("as_of before any fight is empty",
+      ei.as_of(ei.table["Event_Date"].min()) == {})
+check("as_of after everything equals latest()",
+      ei.as_of(ei.table["Event_Date"].max() + pd.Timedelta(days=1)) == ei.latest())
+check("ratings are conserved overall",
+      np.isclose(sum(ei.latest().values()),
+                 ELO_INITIAL * len(ei.latest()), atol=1e-6),
+      "(zero-sum: total is invariant)")
+
+# for_fight and as_of agree except on same-night tournament cards, where
+# for_fight legitimately sees an earlier bout that as_of's date filter cannot.
+# Counted rather than assumed, so the size of the exception is known.
+disagree = 0
+for row in ei.table.itertuples(index=False):
+    snap = ei.as_of(row.Event_Date)
+    if not np.isclose(snap.get(row.fighter_url, ELO_INITIAL), row.elo_pre):
+        disagree += 1
+check("for_fight and as_of agree except on same-date rematches",
+      disagree <= (log.duplicated(["fighter_url", "Event_Date"], keep=False).sum()
+                   + 1),
+      f"({disagree} of {len(ei.table)} rows differ)")
 
 print()
 print("=" * 78)

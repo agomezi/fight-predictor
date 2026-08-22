@@ -33,6 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from src.features import FEATURE_NAMES, build_feature_table, to_matrix  # noqa: E402
 from src.forest import RandomForest  # noqa: E402
 from src.matchup import (  # noqa: E402
+    build_training_matrix,
     ROLLING_DIFF_NAMES,
     FighterBios,
     build_matchup_row,
@@ -134,18 +135,22 @@ def main() -> None:
     # serving rolling features into a model that never saw them -- otherwise the
     # extra columns are silently ignored and the "static + rolling + Elo" label
     # is a lie. So the column list and the training matrix are chosen together.
+    elo_index = None
     if args.with_history:
-        from src.history import HistoryIndex, build_event_log, division_priors
-        log, _ = build_event_log(seed=RANDOM_SEED)
+        from src.history import (
+            EloIndex, HistoryIndex, build_event_log, division_priors,
+        )
+        log, log_info = build_event_log(seed=RANDOM_SEED)
         index, priors = HistoryIndex(log), division_priors(log)
-        cols = list(FEATURE_NAMES) + list(ROLLING_DIFF_NAMES)
-        train_rows = [
-            build_matchup_row(r.fighter_A_url, r.fighter_B_url, r.Weight_Class,
-                              r.Event_Date, bios, index=index, priors=priors)
-            for r in train_df.itertuples(index=False)
-        ]
-        X = rows_to_matrix(train_rows, cols)
-        y = train_df["label"].to_numpy(dtype=int)
+        # Elo is per-fight for training and as-of-date for serving. Both come
+        # from one EloIndex, so the two paths cannot disagree. Passing None
+        # here is what left elo_diff a constant-zero dead column previously.
+        elo_index = EloIndex(log)
+        if log_info["stats_missing"]:
+            print(f"note: stat columns absent from the raw table: "
+                  f"{log_info['stats_missing']}\n")
+        X, y, cols = build_training_matrix(train_df, bios, index=index,
+                                           priors=priors, elo_index=elo_index)
     else:
         cols = list(FEATURE_NAMES)
         X, y = to_matrix(train_df)
@@ -155,10 +160,13 @@ def main() -> None:
                           oob_score=False, random_state=RANDOM_SEED).fit(X, y)
 
     # --- mirror-average both orderings -------------------------------------
+    # Serving ratings: each fighter's rating after every fight strictly before
+    # the bout. For a future bout that is simply their current rating.
+    serve_elo = elo_index.as_of(when) if elo_index is not None else None
     fwd = build_matchup_row(url_a, url_b, division, when, bios,
-                            index=index, priors=priors)
+                            index=index, priors=priors, elo_ratings=serve_elo)
     rev = build_matchup_row(url_b, url_a, division, when, bios,
-                            index=index, priors=priors)
+                            index=index, priors=priors, elo_ratings=serve_elo)
     p_fwd = float(forest.predict_proba(rows_to_matrix([fwd], cols))[0])
     p_rev = float(forest.predict_proba(rows_to_matrix([rev], cols))[0])
     p = (p_fwd + (1.0 - p_rev)) / 2.0
@@ -180,7 +188,13 @@ def main() -> None:
     # everywhere (no per-fight elo_ratings), so the elo_diff column is present
     # but inert in both training and serving -- consistent, but not yet a live
     # signal. Say so rather than claim an Elo edge the model has not been given.
-    print(f"features      : {'static + rolling form (Elo column inert)' if index else 'static only'}")
+    print(f"features      : {'static + rolling form + live Elo' if index else 'static only'}"
+          + f"  ({len(cols)} columns)")
+    if serve_elo is not None:
+        ra, rb = serve_elo.get(url_a), serve_elo.get(url_b)
+        show = lambda v: "unrated (debut)" if v is None else f"{v:.0f}"
+        print(f"Elo (as of {when.date()}): {args.fighter_a} {show(ra)} | "
+              f"{args.fighter_b} {show(rb)}")
     print()
     print(f"P({args.fighter_a} wins) = {p:.3f}")
     print(f"P({args.fighter_b} wins) = {1.0 - p:.3f}")
@@ -198,7 +212,8 @@ def main() -> None:
     print("Probabilities cluster near 0.5 and should. Anything near 0.9 from")
     print("these features would be a bug, not a strong opinion.")
     if not index:
-        print("Rolling form and Elo are not in this prediction yet.")
+        print("Rolling form and Elo are not in this prediction. Pass "
+              "--with-history to include them.")
 
 
 if __name__ == "__main__":

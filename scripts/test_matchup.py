@@ -82,21 +82,38 @@ print("=" * 78)
 print("SERVING-PATH EDGE CASES")
 print("=" * 78)
 
-# Pick two real fighters (and a real division) off the feature table, so the
-# edge-case rows resolve against the actual data rather than fixture urls.
-sample = features.iloc[0]
-url_x, url_y = str(sample["fighter_A_url"]), str(sample["fighter_B_url"])
-div = sample["Weight_Class"]
+# Pick real fighters off the feature table. Crucially, pick a pair whose bios
+# are POPULATED: features.iloc[0] is a 1994 bout with no DOB on either side, so
+# its age_diff is the imputed 0.0 and every check below would compare 0.0 with
+# 0.0 -- passing because the value is absent, not because the property holds.
+populated = features[~features["age_diff_missing"]
+                     & ~features["reach_diff_missing"]].iloc[0]
+url_x = str(populated["fighter_A_url"])
+url_y = str(populated["fighter_B_url"])
+div = populated["Weight_Class"]
 
 # A future bout: no history needed for static features, so this must just work.
 future = build_matchup_row(url_x, url_y, div, pd.Timestamp("2030-01-01"), bios)
-check("a future-dated bout builds", np.isfinite(future["age_diff"]) or future["age_diff_missing"])
+check("a future-dated bout builds a real age_diff",
+      np.isfinite(future["age_diff"]) and not future["age_diff_missing"],
+      f"(age_diff {future['age_diff']:+.4f})")
 # age_diff is a DIFFERENCE of two ages, so both sides advance together and the
 # value is invariant to the bout date (up to leap-year rounding in the /365.25).
 far = build_matchup_row(url_x, url_y, div, pd.Timestamp("2030-01-01"), bios)["age_diff"]
 near = build_matchup_row(url_x, url_y, div, pd.Timestamp("2020-01-01"), bios)["age_diff"]
-check("age_diff is invariant to the bout date", np.isclose(far, near, atol=1e-9),
-      f"(2030 {far:.6f} vs 2020 {near:.6f})")
+check("age_diff is invariant to the bout date",
+      np.isclose(far, near, atol=1e-9) and abs(far) > 1e-6,
+      f"(2030 {far:.6f} vs 2020 {near:.6f}; non-zero, so not vacuous)")
+
+# Missing bios must reproduce build_features' flag-and-impute policy exactly.
+# Restored using a real pair that IS missing data -- 12.1% of fights are
+# missing reach, so this is a common path, not a corner.
+gap = features[features["reach_diff_missing"]].iloc[0]
+gap_row = build_matchup_row(str(gap["fighter_A_url"]), str(gap["fighter_B_url"]),
+                            gap["Weight_Class"], gap["Event_Date"], bios)
+check("a missing bio sets the missing flag", gap_row["reach_diff_missing"])
+check("missing diffs are imputed to 0.0, matching build_features",
+      gap_row["reach_diff"] == 0.0 and gap["reach_diff"] == 0.0)
 
 # Swapping the sides must negate every diff. This is the symmetry the label
 # depends on, and predict_card relies on it to average both orderings.

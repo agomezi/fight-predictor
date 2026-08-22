@@ -33,6 +33,8 @@ from sklearn.metrics import (  # noqa: E402
 
 from src.evaluate import (  # noqa: E402
     LOG_LOSS_EPS,
+    delta_verdict,
+    paired_bootstrap_ci,
     accuracy,
     bootstrap_ci,
     brier_score,
@@ -143,6 +145,51 @@ try:
           f"(shuffled brier {shuffled:.4f} outside [{lo:.4f}, {hi:.4f}])")
 except NotImplementedError:
     skip("bootstrap_ci checks", "not implemented yet")
+
+print()
+print("=" * 78)
+print("PAIRED BOOTSTRAP")
+print("=" * 78)
+# Two models sharing their noise, which is what two models scored on one test
+# set actually look like: B is A plus a small consistent edge, not a redraw.
+pa = np.clip(0.5 + 0.10 * (y - 0.5) * 2 + rng.normal(0, 0.15, n), 0.02, 0.98)
+pb = np.clip(pa + 0.03 * (y - 0.5) * 2, 0.02, 0.98)
+
+d = paired_bootstrap_ci(y, pb, pa, brier_score, n_boot=800,
+                        rng=np.random.default_rng(3))
+check("delta is the metric difference on the original data",
+      np.isclose(d[0], brier_score(y, pb) - brier_score(y, pa)))
+check("interval brackets the delta", d[1] <= d[0] <= d[2])
+check("a real improvement excludes zero", d[2] < 0.0,
+      f"({d[0]:+.5f} [{d[1]:+.5f}, {d[2]:+.5f}])")
+check("verdict reads the sign against lower_is_better",
+      delta_verdict(d, lower_is_better=True) == "REAL improvement"
+      and delta_verdict(d, lower_is_better=False) == "REAL regression")
+
+# The whole reason this function exists: pairing cancels the shared test-set
+# noise, so the interval on the difference is far tighter than what comparing
+# two independent single-model intervals would suggest.
+ia = bootstrap_ci(y, pa, brier_score, n_boot=800, rng=np.random.default_rng(1))
+ib = bootstrap_ci(y, pb, brier_score, n_boot=800, rng=np.random.default_rng(2))
+single = ((ia[2] - ia[1]) + (ib[2] - ib[1])) / 2.0
+check("paired interval is much tighter than a single-model interval",
+      (d[2] - d[1]) < single / 4.0,
+      f"({d[2] - d[1]:.5f} vs ~{single:.5f}, {single / (d[2] - d[1]):.1f}x)")
+
+same = paired_bootstrap_ci(y, pa, pa, brier_score, n_boot=200,
+                           rng=np.random.default_rng(4))
+check("a model against itself gives exactly zero delta", same == (0.0, 0.0, 0.0),
+      "(every resample cancels, so the interval collapses)")
+check("identical models read as inside noise",
+      delta_verdict(same, lower_is_better=True) == "inside noise")
+check("same rng reproduces the paired interval",
+      np.allclose(paired_bootstrap_ci(y, pb, pa, brier_score, n_boot=800,
+                                      rng=np.random.default_rng(3)), d))
+try:
+    paired_bootstrap_ci(y, pb[:10], pa, brier_score, n_boot=10)
+    check("mismatched lengths raise", False, "(no error)")
+except ValueError:
+    check("mismatched lengths raise", True)
 
 print()
 print("=" * 78)
