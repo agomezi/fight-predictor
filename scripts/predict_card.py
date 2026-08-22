@@ -35,6 +35,7 @@ from src.features import FEATURE_NAMES, build_feature_table, to_matrix  # noqa: 
 from src.forest import RandomForest  # noqa: E402
 from src.matchup import (  # noqa: E402
     build_training_matrix,
+    feature_columns,
     ROLLING_DIFF_NAMES,
     FighterBios,
     build_matchup_row,
@@ -53,6 +54,57 @@ def prior_fight_counts(features: pd.DataFrame, before) -> dict:
         for url, n in past[col].value_counts().items():
             counts[url] = counts.get(url, 0) + int(n)
     return counts
+
+
+# Percentile of the training distribution above which a matchup counts as
+# extrapolation. Not a hand-picked constant: the threshold is READ OFF the data
+# at runtime, so it tracks the dataset instead of going stale as fights are added.
+OOD_PERCENTILE = 99.0
+
+
+def extrapolation_warnings(features: pd.DataFrame, row: dict) -> list:
+    """Flag a matchup that sits outside the size range the model was trained on.
+
+    WHY THIS EXISTS. The weight features let the model SEE a size mismatch, but
+    seeing is not knowing: measured on this data only 198 fights have
+    |cut_burden_diff| > 30 and just 4 exceed 78, because the UFC does not book a
+    lightweight champion against a heavyweight. Asked about Jones vs Makhachev
+    at welterweight the model does not predict, it EXTRAPOLATES -- and it does so
+    confidently and in the wrong direction, favouring the drained heavyweight
+    slightly more at 170 than at 265.
+
+    That is not a bug to be tuned away; it is the absence of training data, and
+    no amount of fitting invents it. The honest response is to say so. A model
+    that answers "0.558" for a matchup with four comparable rows in history is
+    reporting noise with a decimal point; one that says "this is outside what I
+    have seen" is telling the truth.
+
+    Returns a list of human-readable warning lines, empty when the matchup sits
+    inside the training range.
+    """
+    out = []
+    for col, label in (("weight_diff", "weight gap"),
+                       ("cut_burden_diff", "weight-cut burden")):
+        if col not in features.columns or col not in row:
+            continue
+        value = float(row[col])
+        if not np.isfinite(value) or value == 0.0:
+            continue
+        train = np.abs(features[col].to_numpy(dtype=float))
+        train = train[np.isfinite(train)]
+        if not len(train):
+            continue
+        threshold = float(np.percentile(train, OOD_PERCENTILE))
+        if abs(value) <= threshold:
+            continue
+        comparable = int((train >= abs(value)).sum())
+        pct = 100.0 * comparable / len(train)
+        out.append(
+            f"{label} is {abs(value):.0f} lb -- only {comparable} of "
+            f"{len(train)} training fights ({pct:.2f}%) are that extreme "
+            f"(p{OOD_PERCENTILE:.0f} = {threshold:.0f} lb)"
+        )
+    return out
 
 
 def support_label(n_a: int, n_b: int) -> tuple[str, str]:
@@ -154,6 +206,10 @@ def main() -> None:
                     help="add rolling + Elo features")
     ap.add_argument("--yes", "-y", action="store_true",
                     help="accept the top name suggestion without asking")
+    ap.add_argument("--with-weight", action="store_true",
+                    help="add the weight / cut-burden features. OFF by default: "
+                         "measured at 0.6045 walk-forward against the incumbent "
+                         "0.6107, i.e. it did not clear its bar")
 
     # A misspelled flag ("--divsion") is the same class of miss as a misspelled
     # fighter name, and deserves the same treatment. argparse's own
@@ -231,8 +287,13 @@ def main() -> None:
         if log_info["stats_missing"]:
             print(f"note: stat columns absent from the raw table: "
                   f"{log_info['stats_missing']}\n")
+        cols = feature_columns(with_rolling=True, with_weight=args.with_weight)
         X, y, cols = build_training_matrix(train_df, bios, index=index,
-                                           priors=priors, elo_index=elo_index)
+                                           priors=priors, elo_index=elo_index,
+                                           columns=cols)
+    elif args.with_weight:
+        cols = feature_columns(with_weight=True)
+        X, y, cols = build_training_matrix(train_df, bios, columns=cols)
     else:
         cols = list(FEATURE_NAMES)
         X, y = to_matrix(train_df)
@@ -296,6 +357,22 @@ def main() -> None:
     if not index:
         print("Rolling form and Elo are not in this prediction. Pass "
               "--with-history to include them.")
+
+    # Extrapolation. Distinct from the support tier above: support asks whether
+    # these FIGHTERS have enough history, this asks whether this MATCHUP is a
+    # shape the model has ever been trained on. A cross-division freak show can
+    # have two well-documented fighters and still be a question no row in the
+    # data answers.
+    ood = extrapolation_warnings(features, fwd)
+    if ood:
+        print()
+        print("!" * width)
+        print("EXTRAPOLATION WARNING -- this matchup is outside the training range")
+        for line in ood:
+            print(f"  {line}")
+        print("  The number below is the model guessing past its data, not")
+        print("  predicting from it. Treat the direction as unreliable.")
+        print("!" * width)
 
     # The verdict, in one plain sentence. Everything above is the working; this
     # is the answer, phrased favourite-first so it reads the way a person would
