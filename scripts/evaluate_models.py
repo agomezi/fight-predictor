@@ -243,6 +243,32 @@ def main() -> None:
             print(f"  {name:<9} {d[0]:+.4f}  [{d[1]:+.4f}, {d[2]:+.4f}]  "
                   f"{delta_verdict(d, lower_better)}")
 
+    # --- feature sets across folds ---------------------------------------
+    # The single-tail gain above rests on one 2023-2026 window, and its lower
+    # bound is thin. Walk-forward asks whether it holds across eras, which is
+    # the only way to tell a real feature from a lucky window.
+    rule("FEATURE SETS ACROSS WALK-FORWARD FOLDS")
+    ordered_all = features.sort_values("Event_Date", kind="mergesort")
+    dates_all = ordered_all["Event_Date"].to_numpy()
+    for label, kw in variants:
+        Xa, ya, _cols = build_training_matrix(ordered_all, bios, **kw)
+        rows = run_walk_forward(
+            lambda Xt, yt: RandomForest(
+                n_trees=100, max_depth=12, min_samples_split=10,
+                min_samples_leaf=5, feature_subset="sqrt", oob_score=False,
+                random_state=RANDOM_SEED).fit(Xt, yt),
+            Xa, ya, dates_all, n_folds=8, min_train_frac=0.5,
+        )
+        summary = summarise_folds(rows)
+        accs = " ".join(f"{r['accuracy']:.3f}" for r in rows)
+        print(f"\n{label}")
+        print(f"  per-fold accuracy: {accs}")
+        for name, (mean, sd) in summary.items():
+            print(f"  {name:<9} mean {mean:.4f}  sd {sd:.4f}")
+    print("\nCompare the MEANS between feature sets against the sd WITHIN each.")
+    print("A gain smaller than the fold-to-fold spread is not established by a")
+    print("single tail, however cleanly its bootstrap interval cleared zero.")
+
     rule("THE QUESTION THIS EXISTS TO ANSWER")
     print("Does the forest's +4.2 points over the matched single tree survive")
     print("walk-forward, or was it an artifact of one 2023-2026 window? Read the")
