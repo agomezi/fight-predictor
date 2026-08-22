@@ -28,6 +28,7 @@ Shape of the module:
     features_as_of()    the rolling features
     elo_update()        one rating exchange
     run_elo()           the sweep that calls it in date order
+    EloIndex            as-of rating lookup: for_fight() trains, as_of() serves
     shrink()            pull a rate toward a prior
 """
 
@@ -436,8 +437,20 @@ def run_elo(log: pd.DataFrame, k: float = ELO_K,
     is the only thing preventing that, which is why it is not left to the
     caller.
 
-    Returns a frame of (Fight_URL, fighter_url, elo_pre) -- one row per
-    (fighter, fight), joinable back onto the event log.
+    Returns a frame of (Fight_URL, fighter_url, Event_Date, elo_pre, elo_post)
+    -- one row per (fighter, fight), joinable back onto the event log.
+
+    elo_post is what makes SERVING possible. A training row wants the rating
+    going into that specific fight (elo_pre); a future bout wants each
+    fighter's rating after everything they have already done, which is the
+    elo_post of their most recent fight. Reconstructing that from elo_pre alone
+    is not possible for a fighter's latest bout, because there is no next fight
+    whose elo_pre would carry it -- so it is recorded here instead.
+
+    Ordering within a single date is by the event log's order (fighter_url,
+    then date), which is arbitrary but deterministic. It matters only for the
+    1990s tournament cards where one fighter fought twice in a night; see
+    EloIndex for how the two access modes differ there.
     """
     # One row per fight, taking each fight once rather than once per corner.
     per_fight = (log.sort_values("Event_Date", kind="mergesort")
@@ -452,13 +465,83 @@ def run_elo(log: pd.DataFrame, k: float = ELO_K,
         a, b = row.fighter_url, row.opponent_url
         ra = ratings.get(a, initial)
         rb = ratings.get(b, initial)
-        # Recorded BEFORE the update. Do not move these two lines below it.
-        out.append((row.Fight_URL, a, ra))
-        out.append((row.Fight_URL, b, rb))
         new_a, new_b = elo_update(ra, rb, bool(row.won), k=k)
+        # ra/rb are the PRE-fight ratings and are what a training row for this
+        # fight may see. new_a/new_b already contain this fight's result and
+        # must never be used as a feature FOR this fight -- only for later ones.
+        out.append((row.Fight_URL, a, row.Event_Date, ra, new_a))
+        out.append((row.Fight_URL, b, row.Event_Date, rb, new_b))
         ratings[a], ratings[b] = new_a, new_b
 
-    return pd.DataFrame(out, columns=["Fight_URL", "fighter_url", "elo_pre"])
+    return pd.DataFrame(
+        out,
+        columns=["Fight_URL", "fighter_url", "Event_Date", "elo_pre", "elo_post"],
+    )
+
+
+class EloIndex:
+    """As-of Elo lookup, with the training and serving modes kept explicit.
+
+    The mistake this class exists to prevent: passing a single
+    {fighter_url: rating} snapshot into features_as_of. A snapshot taken at the
+    end of history is correct for the most recent fight and wrong for every
+    other one, so training on it teaches the model to read 2026 ratings off
+    1998 fights -- and serving a different snapshot than training used is
+    train/serve skew on top of that. Two named accessors, one source.
+
+        for_fight(fight_url)  TRAINING. Each corner's rating going into that
+                              exact fight. This is elo_pre, by construction
+                              free of the fight's own result.
+        as_of(date)           SERVING. Each fighter's rating after every fight
+                              strictly before `date`. For a future bout that is
+                              simply their current rating.
+
+    The two agree except on one case, and it is worth knowing rather than
+    smoothing over: a fighter who fought twice on the same night (the 1990s
+    tournament cards). for_fight gives their second bout a rating that already
+    includes the first bout -- which is correct, that result really was known
+    before they walked out again. as_of(date) excludes it, because it filters
+    on date alone and cannot see intra-day order. So for_fight is the more
+    accurate of the two, and it is the one training uses. The disagreement is
+    confined to tournament-era rows; scripts/test_history.py counts them so the
+    number is known rather than assumed.
+    """
+
+    def __init__(self, log: pd.DataFrame, k: float = ELO_K,
+                 initial: float = ELO_INITIAL):
+        self.initial = float(initial)
+        self.table = run_elo(log, k=k, initial=initial)
+        self._by_fight: dict[str, dict] = {}
+        for row in self.table.itertuples(index=False):
+            self._by_fight.setdefault(row.Fight_URL, {})[row.fighter_url] = float(
+                row.elo_pre
+            )
+        # Date-sorted once, so as_of is a filter rather than a re-sort.
+        self._sorted = self.table.sort_values("Event_Date", kind="mergesort")
+
+    def for_fight(self, fight_url: str) -> dict:
+        """Pre-fight ratings for both corners of a known fight. Training path."""
+        return self._by_fight.get(fight_url, {})
+
+    def as_of(self, date) -> dict:
+        """Every fighter's rating after all fights strictly before `date`.
+
+        O(n) in the size of the history, so this is a serving call -- once or
+        twice per prediction. Building a training matrix with it would be
+        quadratic; use for_fight for that.
+        """
+        past = self._sorted[self._sorted["Event_Date"] < pd.Timestamp(date)]
+        if past.empty:
+            return {}
+        last = past.groupby("fighter_url")["elo_post"].last()
+        return {str(k): float(v) for k, v in last.items()}
+
+    def latest(self) -> dict:
+        """Current ratings, after the entire history."""
+        if self.table.empty:
+            return {}
+        last = (self._sorted.groupby("fighter_url")["elo_post"].last())
+        return {str(k): float(v) for k, v in last.items()}
 
 
 # ---------------------------------------------------------------------------
