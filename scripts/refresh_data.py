@@ -150,10 +150,24 @@ def discover_new_events(after: pd.Timestamp, limit=None):
     return found[:limit] if limit else found
 
 
+def article_slug(event_name: str) -> str:
+    """Wikipedia's article title for an event, which is NOT always its full name.
+
+    Numbered pay-per-views live at "UFC 327", not
+    "UFC 327: Prochazka vs. Ulberg" -- the subtitle is on the list page but not
+    in the article title. Using the full name silently 404s, and because those
+    are precisely the numbered PPVs, the four biggest cards of the catch-up were
+    the four that went missing. Fight Nights do use their full title.
+    """
+    m = re.match(r"^(UFC\s+\d+)\s*:", event_name.strip())
+    if m:
+        return m.group(1).replace(" ", "_")
+    return event_name.replace(" ", "_")
+
+
 def parse_event(event_name: str):
     """Fetch one event page and return its bout rows, main event first."""
-    slug = event_name.replace(" ", "_")
-    page = fetch(WIKI + slug)
+    page = fetch(WIKI + article_slug(event_name))
     tables = re.findall(
         r'<table[^>]*class="[^"]*(?:toccolours|wikitable)[^"]*"[^>]*>.*?</table>',
         page, re.S,
@@ -201,19 +215,27 @@ def canonicalise(name: str, canon: dict) -> str:
 
 
 def build_rows(events, columns, canon=None, verbose=True):
-    """Turn parsed bouts into CSV rows matching the existing schema."""
+    """Turn parsed bouts into CSV rows matching the existing schema.
+
+    Returns (rows, failed) where `failed` names every event that produced no
+    bouts. Reported loudly at the end rather than as a line that scrolls past:
+    a partial ingest that looks successful is how the four biggest cards of a
+    five-month catch-up went missing once already.
+    """
     canon = canon or {}
-    rows, unmatched_names = [], set()
+    rows, failed = [], []
     for when, name in events:
         date_iso = when.date().isoformat()
         try:
             bouts = parse_event(name)
         except Exception as exc:                        # noqa: BLE001
             print(f"  !! {name}: fetch/parse failed ({exc}) -- skipped")
+            failed.append(name)
             continue
         if not bouts:
             print(f"  !! {name}: no results table found -- skipped "
                   "(event may be scheduled, not completed)")
+            failed.append(name)
             continue
         for i, b in enumerate(bouts):
             if not b["winner"] or not b["loser"]:
@@ -243,7 +265,7 @@ def build_rows(events, columns, canon=None, verbose=True):
         if verbose:
             print(f"  {date_iso}  {len(bouts):>2} bouts  {name}")
         time.sleep(POLITE_DELAY_S)
-    return rows, unmatched_names
+    return rows, failed
 
 
 def validate(existing: pd.DataFrame, new_rows, known_names) -> list:
@@ -324,8 +346,16 @@ def main() -> None:
     print(f"{len(events)} new event(s) to ingest"
           + (f" (limited to {args.limit})" if args.limit else "") + ":\n")
 
-    new_rows, _ = build_rows(events, columns, canon=canon)
-    print(f"\nparsed {len(new_rows)} bouts from {len(events)} event(s)")
+    new_rows, failed = build_rows(events, columns, canon=canon)
+    ingested = len(events) - len(failed)
+    print(f"\nparsed {len(new_rows)} bouts from {ingested} of {len(events)} event(s)")
+    if failed:
+        print(f"\n  {len(failed)} EVENT(S) PRODUCED NOTHING:")
+        for name in failed:
+            print(f"    - {name}   (tried /wiki/{article_slug(name)})")
+        print("  Check each by hand before trusting this run. An event with no")
+        print("  results table is usually scheduled-not-yet-fought, which is")
+        print("  fine; anything else is a parser problem.")
 
     problems = validate(existing, new_rows, known)
     if problems:
