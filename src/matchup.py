@@ -30,6 +30,8 @@ calibrated pick for Saturday" is available now.
 
 from __future__ import annotations
 
+import difflib
+
 import numpy as np
 import pandas as pd
 
@@ -37,6 +39,7 @@ from src.data_loading import load_fighters
 from src.features import (
     BOUT_CONTEXT_NAMES,
     FEATURE_NAMES,
+    WEIGHT_CLASS_LBS,
     _age_years,
     _stance_matchup,
     estimate_class_lbs,
@@ -50,6 +53,19 @@ from src.history import AS_OF_FEATURES, features_as_of, prior_for
 # static ones, so the symmetry that makes the label meaningful is preserved.
 # support is a flag about the row, not a difference, so it is carried per side.
 ROLLING_DIFF_NAMES = tuple(f"{k}_diff" for k in AS_OF_FEATURES)
+
+
+def division_of(weight_lbs) -> str:
+    """Nearest standard division to a listed weight.
+
+    The bios carry a weight in pounds, not a division name, so this maps one to
+    the other for DISPLAY only -- it never feeds the model.
+    """
+    if weight_lbs is None or pd.isna(weight_lbs):
+        return "weight unknown"
+    name, _ = min(WEIGHT_CLASS_LBS.items(),
+                  key=lambda kv: abs(kv[1] - float(weight_lbs)))
+    return name
 
 
 class FighterBios:
@@ -90,6 +106,66 @@ class FighterBios:
     def candidates(self, name: str):
         grp = self._by_name.get(name)
         return [] if grp is None else list(grp["Fighter_URL"])
+
+    def suggest(self, name: str, limit: int = 6):
+        """Closest fighter names to a miss, for a "did you mean" prompt.
+
+        Two passes, because the two ways a name misses are different. Typing a
+        surname or a partial ("Ian Garry" for "Ian Machado Garry") is a
+        CONTAINMENT miss and difflib scores it poorly, so token-containment is
+        tried first. A genuine typo ("Makachev") is an EDIT-DISTANCE miss, which
+        is what difflib is good at. Substring hits rank first because they are
+        far more often what was meant.
+        """
+        names = list(self._by_name.keys())
+        query = name.strip().lower()
+        if not query:
+            return []
+
+        # Pass 1: every query word appears in the candidate name. Catches the
+        # dropped-middle-name case, which is the common one.
+        words = [w for w in query.split() if w]
+        contains = [n for n in names
+                    if all(w in n.lower() for w in words)]
+
+        # Pass 2: edit distance, for typos. Cutoff is deliberately loose --
+        # this only proposes, the caller still confirms.
+        close = difflib.get_close_matches(name, names, n=limit, cutoff=0.6)
+
+        # dict.fromkeys preserves order while removing duplicates.
+        return list(dict.fromkeys(contains + close))[:limit]
+
+    def name_of(self, fighter_url: str) -> str:
+        """The dataset's canonical name for a url.
+
+        Worth using in output rather than echoing what the caller typed: after
+        a confirmed suggestion those differ, and reporting the name actually
+        predicted on is the honest one.
+        """
+        row = self._by_url.loc[fighter_url]
+        if isinstance(row, pd.DataFrame):
+            row = row.iloc[0]
+        return str(row["Fighter_Name"])
+
+    def describe(self, fighter_url: str) -> str:
+        """"Name (record, division)" -- enough context to confirm a suggestion.
+
+        A name alone does not settle whether the match is the right person; a
+        record and a division usually do, and both are already in the bios.
+        """
+        row = self._by_url.loc[fighter_url]
+        if isinstance(row, pd.DataFrame):
+            row = row.iloc[0]
+        parts = []
+        record = "-".join(
+            str(int(row[c])) for c in ("Wins", "Losses", "Draws")
+            if c in row.index and not pd.isna(row[c])
+        )
+        if record:
+            parts.append(record)
+        parts.append(division_of(row.get("Weight_lbs")))
+        return f"{row['Fighter_Name']}  ({', '.join(parts)})"
+
 
     def bio(self, fighter_url: str) -> dict:
         if fighter_url not in self._by_url.index:

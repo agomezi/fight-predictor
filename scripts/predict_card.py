@@ -64,18 +64,76 @@ def support_label(n_a: int, n_b: int) -> tuple[str, str]:
     return "ok", f"both fighters have {THIN_FIGHTS}+ prior fights"
 
 
-def resolve_or_exit(bios: FighterBios, name: str, division):
+def resolve_or_exit(bios: FighterBios, name: str, division, assume_yes=False):
+    """Resolve a typed name, offering a confirmable suggestion when it misses.
+
+    Names in the dataset are exact strings ("Ian Machado Garry", not "Ian
+    Garry"), and the resolver matches them exactly -- for good reason, since
+    guessing silently would predict the wrong fighter. But a flat "no fighter
+    named X" makes the tool hostile to use, so a miss now proposes the closest
+    matches with each one's record and division, and asks.
+
+    The confirmation is the point: the suggestion is a GUESS, and a prediction
+    for the wrong person is worse than an error message. Nothing is auto-picked
+    unless --yes says so.
+    """
     url, note = bios.resolve_name(name, division)
-    if url is None:
-        print(f"error: {note}", file=sys.stderr)
-        cands = bios.candidates(name)
-        if cands:
-            print("candidates:", file=sys.stderr)
-            for c in cands:
-                print(f"  {c}", file=sys.stderr)
-            print("pass --division to disambiguate.", file=sys.stderr)
+    if url is not None:
+        return url, note
+
+    # Two different misses. An exact name that resolves to several fighters is
+    # an AMBIGUITY -- the right options are already known. An unknown name is a
+    # TYPO or a partial, so the options have to be guessed.
+    exact = bios.candidates(name)
+    if exact:
+        options = list(exact)
+        print(f"'{name}' matches {len(options)} fighters:", file=sys.stderr)
+    else:
+        options = [u for s in bios.suggest(name) for u in bios.candidates(s)]
+        if not options:
+            print(f"error: no fighter named {name!r}, and nothing close.",
+                  file=sys.stderr)
+            print("  Try a surname, or grep the roster:", file=sys.stderr)
+            print(f'  grep -i "{name.split()[-1] if name.split() else name}" '
+                  "data/ufc_fighters_final.csv", file=sys.stderr)
+            sys.exit(2)
+        print(f"No fighter named '{name}'. Did you mean:", file=sys.stderr)
+
+    options = options[:6]
+    for i, u in enumerate(options, 1):
+        print(f"  {i}. {bios.describe(u)}", file=sys.stderr)
+
+    if assume_yes:
+        print(f"--yes: using 1. {bios.describe(options[0])}\n", file=sys.stderr)
+        return options[0], "auto-accepted suggestion"
+
+    # A piped or redirected stdin cannot answer, and blocking on input() there
+    # would hang a script rather than fail it.
+    if not sys.stdin.isatty():
+        print("(not a terminal -- rerun with the exact name, or pass --yes "
+              "to take the first suggestion)", file=sys.stderr)
         sys.exit(2)
-    return url, note
+
+    prompt = ("Use 1? [Y/n] " if len(options) == 1
+              else f"Which one? [1-{len(options)}, or n to cancel] ")
+    try:
+        answer = input(prompt).strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print("\ncancelled.", file=sys.stderr)
+        sys.exit(2)
+
+    if answer in ("n", "no", "q"):
+        sys.exit(2)
+    if answer in ("", "y", "yes"):
+        chosen = options[0]
+    elif answer.isdigit() and 1 <= int(answer) <= len(options):
+        chosen = options[int(answer) - 1]
+    else:
+        print("not a valid choice; cancelled.", file=sys.stderr)
+        sys.exit(2)
+
+    print(f"using {bios.describe(chosen)}\n", file=sys.stderr)
+    return chosen, "confirmed suggestion"
 
 
 def main() -> None:
@@ -93,6 +151,8 @@ def main() -> None:
                          "Lower it only for smoke-testing against a fixture.")
     ap.add_argument("--with-history", action="store_true",
                     help="add rolling + Elo features")
+    ap.add_argument("--yes", "-y", action="store_true",
+                    help="accept the top name suggestion without asking")
     args = ap.parse_args()
 
     when = pd.Timestamp(args.date) if args.date else pd.Timestamp.today().normalize()
@@ -116,11 +176,16 @@ def main() -> None:
         division = recent[0] if recent else None
         inferred = division is not None
 
-    url_a, note_a = resolve_or_exit(bios, args.fighter_a, division)
-    url_b, note_b = resolve_or_exit(bios, args.fighter_b, division)
+    url_a, note_a = resolve_or_exit(bios, args.fighter_a, division, args.yes)
+    url_b, note_b = resolve_or_exit(bios, args.fighter_b, division, args.yes)
     if url_a == url_b:
         print("error: both names resolved to the same fighter", file=sys.stderr)
         sys.exit(2)
+
+    # Report the CANONICAL names from here on, not what was typed. After a
+    # confirmed suggestion the two differ, and every number below describes the
+    # fighter that was resolved.
+    name_a, name_b = bios.name_of(url_a), bios.name_of(url_b)
 
     # --- train on the past only --------------------------------------------
     train_df = features[features["Event_Date"] < when]
@@ -177,7 +242,7 @@ def main() -> None:
 
     width = 74
     print("=" * width)
-    print(f"{args.fighter_a}  vs  {args.fighter_b}")
+    print(f"{name_a}  vs  {name_b}")
     print("=" * width)
     print(f"division      : {division or 'unknown'}"
           + ("   (inferred from recent bouts -- override with --division)"
@@ -193,17 +258,17 @@ def main() -> None:
     if serve_elo is not None:
         ra, rb = serve_elo.get(url_a), serve_elo.get(url_b)
         show = lambda v: "unrated (debut)" if v is None else f"{v:.0f}"
-        print(f"Elo (as of {when.date()}): {args.fighter_a} {show(ra)} | "
-              f"{args.fighter_b} {show(rb)}")
+        print(f"Elo (as of {when.date()}): {name_a} {show(ra)} | "
+              f"{name_b} {show(rb)}")
     print()
-    print(f"P({args.fighter_a} wins) = {p:.3f}")
-    print(f"P({args.fighter_b} wins) = {1.0 - p:.3f}")
+    print(f"P({name_a} wins) = {p:.3f}")
+    print(f"P({name_b} wins) = {1.0 - p:.3f}")
     print(f"  (both orderings: {p_fwd:.3f} forward, {1.0 - p_rev:.3f} reversed; "
           f"spread {abs(p_fwd - (1.0 - p_rev)):.3f})")
     print()
     print(f"support       : {tier.upper()}  -- {why}")
-    print(f"                {args.fighter_a}: {n_a} prior | "
-          f"{args.fighter_b}: {n_b} prior")
+    print(f"                {name_a}: {n_a} prior | "
+          f"{name_b}: {n_b} prior")
     if tier != "ok":
         print("                Treat this probability as weakly informed.")
     print()
@@ -214,6 +279,21 @@ def main() -> None:
     if not index:
         print("Rolling form and Elo are not in this prediction. Pass "
               "--with-history to include them.")
+
+    # The verdict, in one plain sentence. Everything above is the working; this
+    # is the answer, phrased favourite-first so it reads the way a person would
+    # say it. Canonical names, not what was typed -- after a confirmed
+    # suggestion those differ, and this should name who was actually predicted.
+    if p >= 0.5:
+        fav, dog, pct = name_a, name_b, p
+    else:
+        fav, dog, pct = name_b, name_a, 1.0 - p
+    print()
+    print("-" * width)
+    print(f"{fav} has a {pct:.1%} chance of winning against {dog}.")
+    if pct < 0.55:
+        print("That is close to a coin flip -- treat it as a lean, not a pick.")
+    print("-" * width)
 
 
 if __name__ == "__main__":
