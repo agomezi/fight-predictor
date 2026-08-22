@@ -92,7 +92,18 @@ for row in log.itertuples(index=False):
     # This fighter is corner 1 iff (they are side A) == (A is corner 1).
     own_is_f1 = (is_a == a_is_f1)
     expected_own = fight["F1_Sig_Landed"] if own_is_f1 else fight["F2_Sig_Landed"]
-    if not np.isclose(float(row.own_Sig_Landed), float(expected_own)):
+    got, want = float(row.own_Sig_Landed), float(expected_own)
+    # Results-only rows (Wikipedia refresh) carry no stats, and np.isclose is
+    # False for NaN vs NaN -- so comparing naively reports every such row as a
+    # mapping error. Absence must PROPAGATE (both NaN); presence must MATCH.
+    # This is the same NaN trap the leakage-test docstring warns about, and it
+    # was in this test until a refreshed dataset exposed it.
+    if np.isnan(want) or np.isnan(got):
+        if np.isnan(want) != np.isnan(got):
+            side_ok = False
+            break
+        continue
+    if not np.isclose(got, want):
         side_ok = False
         break
 check("own_/opp_ stats map to the correct corner", side_ok)
