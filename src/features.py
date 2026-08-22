@@ -26,6 +26,8 @@ raw per-fight stats that rolling as-of-fight aggregates are built from.
 
 from __future__ import annotations
 
+import re
+
 from typing import Optional
 
 import numpy as np
@@ -50,6 +52,55 @@ WEIGHT_CLASS_LBS = {
 }
 # Longest keys first so "Light Heavyweight" matches before "Heavyweight".
 _CLASS_KEYS = sorted(WEIGHT_CLASS_LBS, key=len, reverse=True)
+
+
+# Bout-context flags. Every one is announced BEFORE the fight, so none can leak
+# an outcome, and all are already present in the raw tables -- they were simply
+# never carried through.
+#
+# Read the caveat before expecting much: these are BOUT-level, identical for both
+# corners, so unlike every other column here they are symmetric and carry no
+# directional signal on their own. A title-bout flag cannot say who wins. They
+# can only pay through INTERACTIONS -- five-round fights weight cardio and age
+# more heavily, title fights have a different favourite-win rate -- which a tree
+# can find but needs depth and data to find. Expect small or null, and measure.
+def is_title_bout(weight_class: object) -> bool:
+    return isinstance(weight_class, str) and "title" in weight_class.lower()
+
+
+def is_womens_bout(weight_class: object) -> bool:
+    """Women's divisions share their names with the men's ladder.
+
+    estimate_class_lbs matches on substring, so "Women's Bantamweight" resolves
+    to 135 -- the right weight, but it silently pools two populations with
+    different base rates and finish rates. This flag is what lets the model tell
+    them apart, and it is 10.6% of the dataset.
+    """
+    return isinstance(weight_class, str) and "women" in weight_class.lower()
+
+
+def is_nonstandard_weight(weight_class: object) -> bool:
+    """Catchweight, open-weight or tournament bouts -- no division limit applies."""
+    if not isinstance(weight_class, str):
+        return False
+    low = weight_class.lower()
+    return any(k in low for k in ("catch weight", "catchweight", "open weight",
+                                  "openweight", "tournament"))
+
+
+def scheduled_rounds(time_format: object) -> float:
+    """Rounds the bout was scheduled for, from the Time_Format string.
+
+    Five-round bouts are main events and title fights, and they are a different
+    contest: cardio and durability matter far more over 25 minutes than 15. NaN
+    for the early no-time-limit and one-round formats, which are neither.
+    """
+    if not isinstance(time_format, str):
+        return np.nan
+    m = re.match(r"\s*(\d+)\s*Rnd", time_format)
+    if m:
+        return float(m.group(1))
+    return np.nan
 
 
 def estimate_class_lbs(weight_class: object) -> float:
@@ -208,6 +259,12 @@ def build_features(df: pd.DataFrame, seed: int = RANDOM_SEED) -> pd.DataFrame:
         # model would be target leakage.
         "Method": df["Method"],
         "End_Round": df["End_Round"],
+        # Bout context. Symmetric across corners by construction, so these do
+        # not disturb the A/B randomisation -- see the note above the helpers.
+        "is_title_bout": [is_title_bout(w) for w in df["Weight_Class"]],
+        "is_womens_bout": [is_womens_bout(w) for w in df["Weight_Class"]],
+        "is_nonstandard_weight": [is_nonstandard_weight(w) for w in df["Weight_Class"]],
+        "scheduled_rounds": [scheduled_rounds(t) for t in df.get("Time_Format", pd.Series([None]*len(df)))],
         # Symmetric matchup features -- the model-facing set is FEATURE_NAMES.
         "reach_diff": a_reach - b_reach,
         "height_diff": a_height - b_height,
@@ -223,6 +280,11 @@ def build_features(df: pd.DataFrame, seed: int = RANDOM_SEED) -> pd.DataFrame:
     for col in ("reach_diff", "height_diff", "age_diff"):
         out[f"{col}_missing"] = out[col].isna()
         out[col] = out[col].fillna(0.0)
+    # Same policy for the one bout-context numeric: flag the unknown formats
+    # (no-time-limit and one-round era bouts) rather than pretending they were
+    # three-rounders.
+    out["scheduled_rounds_missing"] = out["scheduled_rounds"].isna()
+    out["scheduled_rounds"] = out["scheduled_rounds"].fillna(3.0)
     return out
 
 
@@ -301,6 +363,11 @@ FEATURE_TABLE_COLS = [
     "height_diff_missing",
     "age_diff_missing",
     "stance_matchup",
+    "is_title_bout",
+    "is_womens_bout",
+    "is_nonstandard_weight",
+    "scheduled_rounds",
+    "scheduled_rounds_missing",
 ]
 
 FEATURE_NAMES = [
@@ -312,6 +379,18 @@ FEATURE_NAMES = [
     "age_diff_missing",
     "stance_same",
     "stance_unknown",
+]
+
+
+# Opt-in group. FEATURE_NAMES is deliberately left alone so the v1 and v2
+# numbers already published keep meaning exactly what they meant; a caller that
+# wants bout context asks for it by name.
+BOUT_CONTEXT_NAMES = [
+    "is_title_bout",
+    "is_womens_bout",
+    "is_nonstandard_weight",
+    "scheduled_rounds",
+    "scheduled_rounds_missing",
 ]
 
 

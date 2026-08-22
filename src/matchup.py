@@ -35,10 +35,14 @@ import pandas as pd
 
 from src.data_loading import load_fighters
 from src.features import (
+    BOUT_CONTEXT_NAMES,
     FEATURE_NAMES,
     _age_years,
     _stance_matchup,
     estimate_class_lbs,
+    is_nonstandard_weight,
+    is_title_bout,
+    is_womens_bout,
 )
 from src.history import AS_OF_FEATURES, features_as_of, prior_for
 
@@ -104,7 +108,7 @@ class FighterBios:
 def build_matchup_row(fighter_a_url: str, fighter_b_url: str, division,
                       as_of_date, bios: FighterBios,
                       index=None, priors: dict = None,
-                      elo_ratings: dict = None) -> dict:
+                      elo_ratings: dict = None, rounds=None) -> dict:
     """The feature row for A versus B, in `division`, as known on `as_of_date`.
 
     Args:
@@ -141,9 +145,27 @@ def build_matchup_row(fighter_a_url: str, fighter_b_url: str, division,
         "height_diff": a["height_in"] - b["height_in"],
         "age_diff": a_age - b_age,
     }
+    # Bout context, derived from the same division string features.py uses, via
+    # the same helpers -- not reimplemented, for the same reason ages are not.
+    #
+    # scheduled_rounds is the one field that is genuinely unavailable at serve
+    # time: a future bout's Time_Format does not exist yet. Training passes the
+    # real value; a caller predicting a future bout passes what they know, and
+    # the default follows the actual convention (title bouts and main events go
+    # five, everything else three). This is a difference in INFORMATION, not in
+    # code path, so parity is preserved -- test_matchup.py checks it.
+    title = is_title_bout(division)
+    if rounds is None:
+        rounds = 5.0 if title else 3.0
+
     row: dict = {
         "Event_Date": when,
         "Weight_Class": division,
+        "is_title_bout": title,
+        "is_womens_bout": is_womens_bout(division),
+        "is_nonstandard_weight": is_nonstandard_weight(division),
+        "scheduled_rounds": float(rounds),
+        "scheduled_rounds_missing": False,
         "fighter_A_url": fighter_a_url,
         "fighter_B_url": fighter_b_url,
         "stance_matchup": _stance_matchup(a["stance"], b["stance"]),
@@ -176,11 +198,14 @@ def build_matchup_row(fighter_a_url: str, fighter_b_url: str, division,
     return row
 
 
-def feature_columns(with_rolling: bool = False) -> list:
+def feature_columns(with_rolling: bool = False,
+                    with_bout_context: bool = False) -> list:
     """The model's column list, in the one order both paths must agree on."""
     cols = list(FEATURE_NAMES)
     if with_rolling:
         cols += list(ROLLING_DIFF_NAMES)
+    if with_bout_context:
+        cols += list(BOUT_CONTEXT_NAMES)
     return cols
 
 
@@ -221,6 +246,7 @@ def build_training_matrix(features: pd.DataFrame, bios: "FighterBios",
         rows.append(build_matchup_row(
             r.fighter_A_url, r.fighter_B_url, r.Weight_Class, r.Event_Date,
             bios, index=index, priors=priors, elo_ratings=elo,
+            rounds=getattr(r, "scheduled_rounds", None),
         ))
     X = rows_to_matrix(rows, cols)
     y = features["label"].to_numpy(dtype=int)
@@ -241,6 +267,10 @@ def rows_to_matrix(rows, feature_names=None):
         frame["stance_same"] = (frame["stance_matchup"] == "Same").astype(float)
     if "stance_unknown" in names:
         frame["stance_unknown"] = (frame["stance_matchup"] == "Unknown").astype(float)
+    for flag in ("is_title_bout", "is_womens_bout", "is_nonstandard_weight",
+                 "scheduled_rounds_missing"):
+        if flag in names and flag in frame.columns:
+            frame[flag] = frame[flag].astype(float)
     for n in names:
         if n not in frame.columns:
             raise KeyError(f"matchup rows are missing feature {n!r}")
