@@ -115,8 +115,8 @@ def cut_burden_diff(weight_a, weight_b, weight_class):
     collinear duplicate column, which is the redundancy that retired elo_diff.
 
     Taking each fighter's DISTANCE from the limit first breaks the
-    cancellation (correlation with weight_diff -0.30; the two disagree in sign
-    on 1,785 fights) and encodes what actually matters: a heavyweight forced to
+    cancellation (correlation with weight_diff -0.24; the two disagree in sign
+    on 1,731 fights) and encodes what actually matters: a heavyweight forced to
     make 170 carries an enormous burden while the natural welterweight opposite
     him carries none.
 
