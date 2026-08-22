@@ -51,7 +51,11 @@ from src.history import (  # noqa: E402
     build_event_log,
     division_priors,
 )
-from src.matchup import FighterBios, build_training_matrix  # noqa: E402
+from src.matchup import (  # noqa: E402
+    FighterBios,
+    build_training_matrix,
+    feature_columns,
+)
 from src.tree import DecisionTree  # noqa: E402
 
 RANDOM_SEED = 42
@@ -192,12 +196,35 @@ def main() -> None:
         ("+ rolling form", dict(index=hist, priors=priors, elo_index=None)),
         ("+ rolling + live Elo", dict(index=hist, priors=priors,
                                       elo_index=elo_index)),
+        # Bout context: title / women's / nonstandard-weight / scheduled rounds.
+        # All already in the raw tables and never carried through. Symmetric
+        # across corners, so they carry no directional signal alone and can only
+        # pay via interactions -- measured, not assumed.
+        ("+ rolling + bout context",
+         dict(index=hist, priors=priors, elo_index=None,
+              columns=feature_columns(with_rolling=True, with_bout_context=True))),
     )
+
+    # STEP A's subtraction test, in the same pass: drop the collinear cluster
+    # HANDBACK-4 identified. With sqrt(n) columns sampled per node, redundant
+    # axes crowd out informative ones, so removing them can raise accuracy.
+    DROP = {"win_rate_raw_diff", "elo_diff", "n_fights_diff",
+            "total_fight_secs_diff"}
+    variants = variants + ((
+        "+ rolling, pruned",
+        dict(index=hist, priors=priors, elo_index=None,
+             columns=[c for c in feature_columns(with_rolling=True)
+                      if c not in DROP]),
+    ),)
 
     scored = []
     for label, kw in variants:
         Xtr, ytr, cols = build_training_matrix(train_df, bios, **kw)
-        Xte, yte, _ = build_training_matrix(test_df, bios, columns=cols, **kw)
+        # A variant may already pin `columns`; the test matrix must use exactly
+        # the order the training call resolved, so drop any duplicate key rather
+        # than passing it twice.
+        kw_test = {k: v for k, v in kw.items() if k != "columns"}
+        Xte, yte, _ = build_training_matrix(test_df, bios, columns=cols, **kw_test)
         model = RandomForest(
             n_trees=200, max_depth=12, min_samples_split=10, min_samples_leaf=5,
             feature_subset="sqrt", oob_score=False, random_state=RANDOM_SEED,

@@ -41,14 +41,22 @@ print("=" * 78)
 print(f"REBUILDING {len(features)} HISTORICAL FIGHTS THROUGH build_matchup_row")
 print("=" * 78)
 
+# Pass the real scheduled_rounds, because that is what the training path does
+# (build_training_matrix forwards it). Calling without it exercises the SERVE
+# path's default instead, which is a different question -- measured separately
+# below.
 rebuilt = [
     build_matchup_row(row.fighter_A_url, row.fighter_B_url,
-                      row.Weight_Class, row.Event_Date, bios)
+                      row.Weight_Class, row.Event_Date, bios,
+                      rounds=row.scheduled_rounds)
     for row in features.itertuples(index=False)
 ]
 
 COMPARE = ("reach_diff", "height_diff", "age_diff",
-           "reach_diff_missing", "height_diff_missing", "age_diff_missing")
+           "reach_diff_missing", "height_diff_missing", "age_diff_missing",
+           # Bout context must reproduce too, or the opt-in group is unsafe.
+           "is_title_bout", "is_womens_bout", "is_nonstandard_weight",
+           "scheduled_rounds")
 
 worst = {}
 for col in COMPARE:
@@ -76,6 +84,20 @@ X_serve = rows_to_matrix(rebuilt, FEATURE_NAMES)
 check("encoded matrices are identical",
       X_train.shape == X_serve.shape and bool(np.allclose(X_train, X_serve, atol=1e-9)),
       f"({X_train.shape} vs {X_serve.shape})")
+
+# The serve-time default is a GUESS, because a future bout's Time_Format does
+# not exist yet. Recording its accuracy here rather than leaving it implicit:
+# the misses are overwhelmingly non-title five-rounders, i.e. main events, which
+# the data carries no bout-order field to identify.
+served = np.array([
+    build_matchup_row(row.fighter_A_url, row.fighter_B_url,
+                      row.Weight_Class, row.Event_Date, bios)["scheduled_rounds"]
+    for row in features.itertuples(index=False)
+])
+agree = float(np.mean(served == features["scheduled_rounds"].to_numpy(dtype=float)))
+check("serve-time rounds default is right at least 90% of the time",
+      agree >= 0.90,
+      f"({agree:.1%}; a caller who knows the format should pass rounds=)")
 
 print()
 print("=" * 78)
