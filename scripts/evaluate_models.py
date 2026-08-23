@@ -56,6 +56,7 @@ from src.matchup import (  # noqa: E402
     build_training_matrix,
     feature_columns,
 )
+from src.boosting import GradientBoosting  # noqa: E402
 from src.tree import DecisionTree  # noqa: E402
 
 RANDOM_SEED = 42
@@ -252,6 +253,36 @@ def main() -> None:
             v = float(np.var(Xtr[:, c2.index("elo_diff")]))
             print(f"  elo_diff variance, {label:<22} {v:>12.4f}"
                   + ("   (inert)" if v == 0.0 else "   (live)"))
+
+    # --- boosting vs the forest, on the incumbent feature set ---------------
+    # The last untried lever: this changes the MODEL CLASS rather than adding
+    # another correlated column. n_rounds/learning_rate were chosen by early
+    # stopping on a validation split carved out of the TRAINING data -- never
+    # the test tail. The validation curve turns upward after ~110 rounds, which
+    # is the overfitting a forest does not suffer from.
+    rule("MODEL CLASS — boosting against bagging")
+    inc_label, inc_cols, p_inc, y_inc = scored[1]
+    Xtr_i, ytr_i, _ = build_training_matrix(train_df, bios, index=hist,
+                                            priors=priors, elo_index=None)
+    Xte_i, yte_i, _ = build_training_matrix(test_df, bios, columns=inc_cols,
+                                            index=hist, priors=priors,
+                                            elo_index=None)
+    booster = GradientBoosting(n_rounds=110, learning_rate=0.05, max_depth=3,
+                               min_samples_split=20, min_samples_leaf=10)
+    booster.fit(Xtr_i, ytr_i)
+    p_boost = booster.predict_proba(Xte_i)
+    print(f"{'model':<28}{'accuracy':>10}{'log_loss':>10}{'brier':>9}")
+    print(f"{'forest, 200 trees':<28}{accuracy(y_inc, p_inc):>10.4f}"
+          f"{log_loss(y_inc, p_inc):>10.4f}{brier_score(y_inc, p_inc):>9.4f}")
+    print(f"{'boosting, 110 rounds':<28}{accuracy(yte_i, p_boost):>10.4f}"
+          f"{log_loss(yte_i, p_boost):>10.4f}{brier_score(yte_i, p_boost):>9.4f}")
+    print()
+    print("boosting vs forest, same rows:")
+    for name, fn, lower_better in METRICS:
+        d = paired_bootstrap_ci(yte_i, p_boost, p_inc, fn, n_boot=N_BOOT,
+                                rng=np.random.default_rng(RANDOM_SEED))
+        print(f"  {name:<9} {d[0]:+.4f}  [{d[1]:+.4f}, {d[2]:+.4f}]  "
+              f"{delta_verdict(d, lower_better)}")
 
     rule("PAIRED DIFFERENCES — the test the discipline rule asks for")
     print("Same rows, same resample, both models. Cancels the shared test-set")
