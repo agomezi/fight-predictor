@@ -1,92 +1,99 @@
 # fight-predictor
 
-A UFC fight outcome predictor built on a decision tree written from scratch —
-entropy, information gain, recursive splitting, pruning, and a random forest,
-with no ML library doing the modelling work.
+A UFC fight outcome predictor where the decision tree, the random forest and the
+gradient booster are all written from scratch — entropy, information gain,
+recursive splitting, pruning, bootstrap aggregation, and boosting on the negative
+gradient of log loss. `scikit-learn` appears only as an independent
+implementation to check the results against.
 
-The goal was to understand the algorithm rather than to import one, so
-`scikit-learn` appears only as an independent implementation to check the
-results against.
+The interesting part is not the model. It is that **the measuring instrument was
+built before the things it measures**, and then used to retire most of my own
+ideas — including the two I was most confident about.
 
-## The problem, and an honest baseline
-
-Predict the winner of a UFC fight from pre-fight information alone.
-
-The label is symmetrised: for every fight a seeded coin flip decides which
-corner becomes "fighter A", and all features are computed as A-minus-B
-differences. That destroys the corner-position bias in the raw data, which
-means:
-
-- **The majority-class baseline is 0.5026, not ~0.63.** Any accuracy near 0.50
-  is worthless.
-- Published models on comparable fighter-attribute features land around
-  **0.58–0.62**.
-- Closing betting lines sit near **0.65** — a useful ceiling reference, not a
-  target, since the market also sees camp news, injuries and late replacements.
+---
 
 ## Results
 
-Chronological split: train 1994–2023 (6,888 fights), test 2023–2026 (1,512).
+Data: 8,658 UFC fights, 1994-03-11 → 2026-08-15. Evaluated with **eight
+expanding-window walk-forward folds**, not a single held-out tail.
 
-| Model | Train | Test |
+| feature set / model | accuracy | sd | log loss |
+|---|---|---|---|
+| coin flip (majority class) | 0.5026 | — | 0.6931 |
+| static biometrics only (8 cols) | 0.5728 | 0.0232 | 0.6794 |
+| **+ rolling as-of-fight form (22 cols)** | **0.6107** | 0.0291 | **0.6624** |
+| gradient boosting, same features | 0.6082 | 0.0241 | 0.6615 |
+
+**0.611 accuracy / 0.662 log loss** is the honest number. For scale:
+
+- **0.50** is the floor. The label is symmetrised — a seeded coin flip decides
+  which corner becomes "fighter A" and every feature is an A-minus-B difference
+  — so the ~63% corner bias in the raw data is destroyed and there is no free
+  accuracy to collect.
+- **0.58–0.62** is where published models on comparable features land.
+- **~0.66** is closing betting lines. That is the practical ceiling, not a
+  target: the market also sees camp news, injuries and late replacements, and a
+  flash knockout is not predictable from any feature.
+
+---
+
+## What was measured and retired
+
+Every idea below was implemented, measured with a **paired bootstrap on the same
+rows** and across the **fold-to-fold spread**, and kept only if it cleared both.
+Almost nothing did.
+
+| idea | result | why it failed |
 |---|---|---|
-| Baseline (majority class) | — | 0.5026 |
-| Decision tree, unpruned | 0.9936 | 0.5403 |
-| Decision tree, pruned — depth chosen on validation | 0.5769 | 0.5840 |
-| Decision tree, fixed depth 4 | — | 0.5952 |
-| Decision tree, forest config (all features, matched pruning) | — | 0.5549 |
-| Random forest (200 trees) | 0.6109 | 0.5972 |
+| Live Elo ratings | 0.5987 — retired | 0.84 collinear with `win_rate_diff`, which is the better label predictor of the two |
+| Column pruning | 0.6035 — retired | removing collinear columns did not free the per-node feature sample |
+| Bout context (title / women's / rounds) | 0.5999 — retired | bout-level, so symmetric across corners: a title-bout flag cannot say who wins |
+| Weight, 4 columns | 0.6045 — retired | near-zero on the 78% of fights inside a division |
+| `weight_diff` alone | 0.6100 — parity | indistinguishable from the incumbent |
+| `cut_burden_diff` alone | **real regression** | the absolute-distance transform discards which fighter is heavier |
+| Gradient boosting | 0.6082 — retired | better log loss, worse accuracy, both inside the noise |
+| Forest vs a tuned single tree | +0.002 | the forest ties the best tree; bagging buys robustness, not peak accuracy |
+| Forest/booster blend | inside noise | beats the booster on log loss, not the forest |
+| Platt / isotonic calibration | inside noise | the model was already well calibrated — see below |
 
-The unpruned tree is the point of the exercise, not an embarrassment: it
-memorises 99.4% of the training set and still lands 4.4 points *below* the
-pruned tree on unseen fights. Pruning gives up 42 points of training accuracy
-to buy those 4.4 points of real accuracy.
+**The one thing that worked** was rolling as-of-fight form: +0.038 accuracy over
+static features, and it won **8 of 8 folds**. Everything since has been noise.
 
-Two pruned trees are listed because they answer different questions. The 0.5840
-row is the honest one — its `max_depth` was selected on a chronological
-validation split carved out of the training window, never on the test set. The
-0.5952 row is a hardcoded depth-4 tree, kept only because it is the reference
-the forest was originally compared against.
+### Two lessons that cost real work to learn
 
-That the hardcoded depth comes out 1.1 points ahead of the selected one is
-itself a finding rather than a bug: the gap sits inside the same confidence
-interval discussed below, which is what noise-dominated hyperparameter selection
-looks like. Choosing `max_depth` on ~1,400 validation rows, at a signal strength
-where the best available split is worth about 0.01 bits, is not a reliable
-procedure. Distinguishing the two properly needs the evaluation harness that
-does not exist yet — bootstrap intervals and walk-forward folds instead of a
-single held-out tail.
+**A clean number can point the wrong way.** Column pruning had the best
+single-tail log loss of any variant and was *worse* than the incumbent on the
+fold mean. That failure mode is the entire reason the walk-forward harness
+exists.
 
-A 1,512-fight test set carries roughly a ±2.5 point confidence interval, so the
-forest's +0.002 over the depth-4 tree is **not** a real difference. But that
-comparison is confounded — the depth-4 tree differs from the forest in both
-pruning and ensembling, so it cannot isolate what the ensemble buys. The honest
-comparison is against a single tree with the forest's own pruning settings and
-every feature visible (the 0.5549 row). Against that, the forest gains
-**+4.2 points** (0.5972 vs 0.5549), comfortably outside the ±2.5 interval: here
-bagging plus feature subsampling is a real, measurable improvement, not noise.
+**Testing features in bundles can bury a good one — but so can reading noise as
+signal.** Weight was measured as four columns and read as "does not pay"; split
+apart, one column looked like a free win at +0.0003. Against a fold sd of 0.026
+that is not a win either. Both readings were errors in opposite directions, and
+only re-measuring caught the second one.
 
-The catch is that the matched tree lands *below* the pruned single tree (0.5549
-vs 0.5840): letting one unbagged tree grow to the forest's looser depth
-overfits, and the ensemble's +4.2 points is largely undoing that self-inflicted
-damage rather than beating the best single tree. Against the *best-scoring*
-single tree — the fixed depth-4 tree at 0.5952 — the forest is **+0.2 points
-(0.5972 vs 0.5952)**, which is squarely inside the ±2.5 interval and therefore
-noise. So the honest one-line answer to "does the forest beat your best tree?"
-is: not on accuracy.
+### What the model actually keys on
 
-Where the ensemble does earn its keep is on the *probabilities*, which accuracy
-never showed. Scored by log loss (`scripts/evaluate_models.py`), the matched
-tree is **1.87** — nearly three times the 0.693 coin-flip reference, because its
-pure leaves emit confident 0/1 predictions that are often wrong. The forest
-averages 200 such trees down to **0.674**, beating the reference and calibrating
-cleanly across every bin. Bagging's real product here is not a higher hit rate;
-it is a usable probability instead of a wildly overconfident one.
+Gain-weighted importance across the forest, on the 22-column incumbent:
 
-With only 8 features and ~3 sampled per node, many trees in the ensemble draw a
-feature subset that is mostly missingness indicators. So features remain the
-binding constraint on the accuracy *ceiling* — the forest's calibration win
-does not move the hit rate, and that is exactly the point.
+```
+age_diff              0.1126  ##################
+win_rate_diff         0.0799  #############
+sig_absorbed_pm_diff  0.0733  ############
+sig_landed_pm_diff    0.0614  ##########
+td_landed_p15m_diff   0.0593  #########
+win_rate_raw_diff     0.0587  #########
+```
+
+Age is the single heaviest feature, and it was also the heaviest on the
+static-only model where it took 0.595 of the total — roughly as much as every
+other biometric combined. Reach, the number commentators reach for first, was
+worth about the same as height and a quarter of what age is worth. Age is
+computed as of the event date rather than from a scraped birthdate against
+today, so it is not a leak.
+
+Worth noting `sig_absorbed_pm_diff` outranking `sig_landed_pm_diff`: how much a
+fighter gets hit predicts better than how much they land.
 
 ### Out-of-bag scoring reads *pessimistic* here
 
@@ -96,149 +103,137 @@ The forest's OOB accuracy is 0.5585 against a test accuracy of 0.5972 — OOB is
 The usual expectation is the opposite: OOB rows are scattered across the whole
 training window, so OOB is a random-split estimate, and random splits normally
 flatter you relative to a chronological holdout. That effect is real but is
-outweighed by a larger one. The training window includes the early era, where
-biometrics are sparse and outcomes are noisier; the test window is 2023–2026,
-which is modern, well-documented, and simply easier. The test distribution is
-not harder than the training distribution — it is easier, and OOB is measuring
-the harder pool.
+outweighed by a larger one. The training window opens in 1994, where biometrics
+are sparse and outcomes noisier; the test window is modern and well-documented.
+The test distribution is not harder than the training distribution — it is
+easier, and OOB is scoring the harder pool.
 
-### Feature importance
-
-Gain-weighted across all trees in the forest:
-
-```
-age_diff             0.5952  ####################################
-height_diff          0.1680  ##########
-reach_diff           0.1667  ##########
-stance_same          0.0363  ##
-reach_diff_missing   0.0163  #
-stance_unknown       0.0079
-age_diff_missing     0.0075
-height_diff_missing  0.0020
-```
-
-Age is worth roughly as much as every other static attribute combined. Reach —
-the number commentators reach for first — is worth about the same as height,
-and a quarter of what age is worth. Age is computed as of the event date, not
-from a scraped birthdate against today, so this is not a leak.
-
-## How it works
-
-1. **Load and normalise** — `src/data_loading.py` parses the string-encoded
-   biometrics (`5' 11"`, `72.0"`, `155 lbs.`, `38%`) into numbers.
-2. **Resolve the join** — fighter names are not unique, so colliding names are
-   resolved to the profile whose listed weight best matches the bout's weight
-   class, giving exactly one profile per fighter per fight.
-3. **Build symmetric features** — reach, height and age differences plus a
-   stance matchup, all relative to the randomised fighter A.
-4. **Split chronologically** — on an *event-date* boundary, so no single
-   night's card is divided between train and test.
-5. **Grow the tree** — best-gain split search, pre-pruning via `max_depth`,
-   `min_samples_split` and `min_samples_leaf`.
-6. **Grow the forest** — bootstrap sampling per tree, a random feature subset
-   per node, majority vote, and out-of-bag scoring from the rows each tree
-   never saw.
-
-Split search sorts each column once and sweeps the cut point with a running
-prefix sum of positive labels, so candidate thresholds are scored in O(1) each
-and the cost per feature is O(n log n) rather than O(n²).
-
-## Validation against scikit-learn
+### Validated against scikit-learn
 
 `scripts/compare_sklearn.py` fits this tree and `DecisionTreeClassifier(
 criterion="entropy")` on identical data with matched hyperparameters.
 
-On **synthetic data with real signal** (0.39 bits of gain at the root), the two
-agree on the root split exactly and on **every single test row**.
+On **synthetic data with real signal** (0.39 bits at the root) the two agree on
+the root split exactly and on **every test row**.
 
-On the **UFC data** they agree on 85.5% of rows while landing at 0.5952 vs
-0.5959 accuracy — statistically the same result from visibly different trees.
-That gap is a signal-strength artifact, not a defect. The best available split
-in the entire dataset is worth **0.0115 bits** against a root entropy of
-0.99999, so the gain surface is nearly flat and hundreds of candidate splits
-sit within a hair of one another. Microscopic differences at the root cascade
-into different trees by depth 4 and arrive at the same accuracy.
+On the **UFC data** they agree on 85.5% of rows while landing at 0.5952 against
+0.5959 accuracy — the same result from visibly different trees. That gap is a
+signal-strength artefact, not a defect: the best available split in the entire
+dataset is worth **0.0115 bits** against a root entropy of 0.99999, so the gain
+surface is nearly flat, hundreds of candidate cuts sit within a hair of the
+argmax, and a microscopic difference at the root cascades into a different tree
+by depth 4. The verdict in that script is gated on root gain for exactly this
+reason — thresholding row agreement at this signal strength measures
+tie-breaking, not correctness.
 
-Where the two differ at the root, this implementation's split has the *higher*
-gain, and an exhaustive brute-force scan over all 5,336 candidate cut points
-confirms it is the true argmax. Why sklearn's Cython splitter selects a
-marginally worse cut here is an open question and was not chased further, since
-it does not affect the conclusion.
+---
 
-The from-scratch tree fits a depth-4 tree on 6,888 rows about 3x slower than
-sklearn's. The gap widens with depth — sklearn's tree is Cython, this one is
-NumPy.
+## How leakage is prevented
 
-## Data leakage — the main thing this project is about
+The reason a naive version of this project reports 85% accuracy is data leakage,
+and in this sport **a leak looks like success**. Three defences, all enforced by
+tests:
 
-The source dataset makes leakage very easy, and avoiding it was most of the
-work:
+**Career averages are excluded.** The source `fighters.csv` carries `Wins`,
+`Losses`, `SLpM` and friends, scraped in 2026. Joining those onto a 2012 fight
+tells the model the fighter went on to never lose. They have never been in the
+feature set.
 
-- **Fighter career columns** (`Wins`, `Losses`, `SLpM`, `Str_Acc`, `TD_Avg`, …)
-  are career-to-date *as scraped in 2026*. Joining a fighter's final 29-0
-  record onto a 2012 fight tells the model he never went on to lose. None of
-  these columns are used.
-- **In-fight statistics** (knockdowns, significant strikes, takedowns, control
-  time) describe what happened *inside* the fight being predicted. None are
-  used.
-- **Random train/test splits** let career-shaped features carry future
-  information backwards. The split is chronological everywhere, including the
-  validation split used for tuning.
+**Every rolling feature is computed strictly before the bout date.** Not `<=` —
+a row sharing the date is either the fight itself or same-card information nobody
+had beforehand. `src/history.features_as_of` enforces this per row.
 
-Including any of the above raises accuracy. That increase is the tell, not the
-result.
+**`scripts/test_leakage.py` proves it two independent ways.** It invents a
+30-second blowout win dated *after* a bout and requires the past features to come
+back byte-identical; and it shuffles the labels and requires the model to score
+no better than the base rate. Both must pass before any number is trusted.
+
+The harness that judges everything lives in `src/evaluate.py`: log loss and Brier
+alongside accuracy, bootstrap confidence intervals, a **paired** bootstrap that
+resamples once and scores both models on the same rows (13–15× tighter than
+comparing two independent intervals), and walk-forward folds.
+
+---
 
 ## Known limitations
 
-- **Features are static only** — reach, height, age, stance. No form, record,
-  or opponent quality yet. As-of-fight-date rolling aggregates plus an Elo
-  rating are the next step, and are where the remaining accuracy is.
-- **`Reach` is 44% missing** (1,940 of 4,455 fighters). The pipeline carries
-  explicit `*_missing` indicator columns rather than imputing silently.
-  Missingness plausibly correlates with era and with obscure fighters, so those
-  indicators could be measuring something other than reach — though their
-  near-zero gain contribution argues against that.
-- **The depth sweep in `train_tree.py` is reported on the test set for
-  illustration only.** The pruning hyperparameters themselves are tuned on a
-  validation split carved chronologically out of the training window, never
-  against the test set.
-- **A 1,512-fight test set gives roughly a ±2.5 point confidence interval**, so
-  differences smaller than that are not distinguishable from noise. Several
-  differences reported above fall into that category and are labelled as such.
+Stated plainly, because they bound what the number means.
 
-## Data
+**Five of fourteen rolling features go stale.** `ufcstats.com` — the only source
+publishing per-fight statistics — now serves a JavaScript proof-of-work
+interstitial, and working around bot detection is out of scope. Weekly refreshes
+come from Wikipedia, which carries results but not strike counts. So
+`sig_landed_pm`, `sig_absorbed_pm`, `td_landed_p15m`, `sub_att_p15m` and
+`ctrl_frac` freeze for any fighter who has fought since the last full-stat
+snapshot. The other nine, including every result-derived feature, refresh
+normally.
 
-Kaggle's comprehensive UFC dataset, scraped from ufcstats.com. Not committed —
-download it and place both CSVs in `data/`:
+**Cross-division predictions extrapolate.** The model can see weight, and
+`cut_burden_diff` responds to the contracted division. But only 198 fights have a
+burden gap above 30 lb, mostly heavyweight bouts rather than real weight cuts, so
+for something like a lightweight champion at heavyweight the model is answering
+outside its training distribution. It should say so; it currently does not.
+
+**Reach is missing on 12% of fights.** 24% of active fighters have no reach
+recorded, concentrated in the 1990s. Those 633 cannot be backfilled — the source
+is behind the challenge above.
+
+**Half the dataset has a thin corner.** 25.5% of fights involve a UFC debutant
+and 55.7% have a side with under three prior fights. Those fighters fall back to
+a division prior, so the model is running largely on biometrics for them.
+Pre-UFC records would fix this and are the best remaining idea, unbuilt.
+
+**Calibration was measured and not shipped.** Fitted on a chronological
+validation fold, Platt scaling moved test log loss by −0.0010 and isotonic made
+it worse. The reliability table shows why: the populated probability bins were
+already within 0.01–0.04 of observed. Averaging 200 trees calibrates fairly well
+on its own, so there was little to correct. A parameter that buys nothing does
+not ship.
+
+---
+
+## Repository
 
 ```
-data/ufc_gold_dataset_final.csv    8,551 fights, 1994-2026
-data/ufc_fighters_final.csv        4,455 fighter profiles
+src/
+  tree.py        entropy, information gain, O(n log n) split search, pruning
+  forest.py      bootstrap aggregation, OOB scoring, feature importance
+  boosting.py    gradient boosting with Newton leaves, monotone constraints
+  history.py     per-fighter event log, as-of features, Elo, shrinkage
+  features.py    matchup features, chronological split, the leakage boundary
+  matchup.py     ONE row builder shared by training and serving
+  evaluate.py    metrics, bootstrap + paired bootstrap, walk-forward folds
+  calibrate.py   Platt (hand-written) and isotonic
+scripts/
+  test_*.py      the suites, including the leakage proof
+  evaluate_models.py   the ruler
+  predict_card.py      two names in, a calibrated probability out
+  refresh_data.py      append newly-completed events
+  export_model.py      bundle the model WITH its column order
 ```
+
+`src/matchup.py` exists to prevent training/serving skew: if training and
+prediction build a feature row differently, served probabilities go quietly wrong
+while every test metric stays clean. One function builds both, and
+`scripts/test_matchup.py` rebuilds all 8,658 historical fights through the
+serving path and requires zero delta.
 
 ## Running it
 
 ```bash
-python -m venv .venv
-.venv/Scripts/activate          # Windows;  source .venv/bin/activate on macOS/Linux
-pip install -r requirements.txt
-
-python scripts/explore_data.py      # data shape, missingness, join sanity
-python scripts/build_features.py    # build and check the feature table
-python scripts/test_entropy.py      # entropy / information gain checks
-python scripts/test_tree.py         # differential test: fast sweep vs naive reference
-python scripts/train_tree.py        # unpruned vs pruned, overfitting made visible
-python scripts/train_forest.py      # random forest with out-of-bag scoring
-python scripts/compare_sklearn.py   # independent check against scikit-learn
+python -m venv .venv && .venv/bin/pip install -r requirements.txt
+python scripts/test_leakage.py        # the gate, ~30s
+python scripts/evaluate_models.py     # the ruler, ~14 min
+python scripts/predict_card.py "Islam Makhachev" "Ilia Topuria" --with-history
 ```
 
-## Layout
+The datasets are not committed. See `data/PROVENANCE.md` for sources, checksums
+and the note on why the original scrape is not reproducible.
 
-```
-src/
-  data_loading.py   CSV loading, unit parsing, fighter/bout join
-  features.py       matchup features, chronological split, model matrix
-  tree.py           entropy, information gain, split search, tree growth
-  forest.py         bootstrap sampling, majority vote, out-of-bag scoring
-scripts/            exploration, feature build, tests, training, comparison
-```
+## Data
+
+Kaggle's comprehensive UFC dataset (scraped from ufcstats.com), refreshed
+forward from Wikipedia's *List of UFC events* under CC BY-SA. A weekly GitHub
+Actions job discovers new bouts and opens a **pull request** rather than pushing,
+so a human reviews the diff before anything reaches the training data — that
+being the one place silent corruption could enter.
