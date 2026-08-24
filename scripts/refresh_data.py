@@ -59,6 +59,19 @@ LIST_PAGE = WIKI + "List_of_UFC_events"
 OUT_DEFAULT = REPO / "data" / "ufc_gold_dataset_refreshed.csv"
 POLITE_DELAY_S = 2.0
 
+# The fights-table schema, needed by --since mode where no CSV is present to
+# read a header from. Kept in the same order as the source file.
+SCHEMA_COLUMNS = (
+    "Fight_URL", "Fighter_1", "Fighter_2", "Winner", "Weight_Class", "Method",
+    "End_Round", "End_Time", "Total_Fight_Time_Sec", "Time_Format",
+    "F1_KD", "F2_KD", "F1_Sig_Landed", "F1_Sig_Att", "F2_Sig_Landed",
+    "F2_Sig_Att", "F1_TD_Landed", "F2_TD_Landed", "F1_TD_Att", "F2_TD_Att",
+    "F1_Sub_Att", "F2_Sub_Att", "F1_Ctrl_Sec", "F2_Ctrl_Sec",
+    "F1_Head", "F2_Head", "F1_Body", "F2_Body", "F1_Leg", "F2_Leg",
+    "F1_Distance", "F2_Distance", "F1_Clinch", "F2_Clinch", "F1_Ground",
+    "F2_Ground", "Event_Date",
+)
+
 # Wikipedia's method strings -> the CSV's vocabulary. Order matters: the
 # doctor's-stoppage check must precede the generic TKO one.
 METHOD_MAP = (
@@ -321,16 +334,36 @@ def main() -> None:
     ap.add_argument("--limit", type=int, default=None,
                     help="only process the first N new events")
     ap.add_argument("--out", default=str(OUT_DEFAULT))
+    ap.add_argument("--since", default=None,
+                    help="discover events after this date (YYYY-MM-DD) instead "
+                         "of reading the local CSV's max. Lets CI run discovery "
+                         "with no dataset present -- see --pending-only.")
+    ap.add_argument("--pending-only", default=None,
+                    help="write ONLY the newly-parsed rows to this path and "
+                         "skip the merge. The output is small enough to review "
+                         "in a pull request diff, which is the point: a "
+                         "scheduled job should show a human what it found "
+                         "rather than rewrite the training data unattended.")
     ap.add_argument("--add-bio-stubs", action="store_true",
                     help="also write a fighters CSV with NaN-biometric stubs "
                          "for genuinely new fighters, so their bouts are not "
                          "dropped by the name join")
     args = ap.parse_args()
 
-    existing = load_fights()
-    columns = list(pd.read_csv(FIGHTS_CSV, nrows=0).columns)
-    prev_max = existing["Event_Date"].max()
-    bios_all = pd.read_csv(FIGHTERS_CSV, dtype=str)
+    # --since lets discovery run without the dataset, which is what makes a
+    # CI job possible at all: data/ is gitignored, so a runner has no CSVs.
+    data_free = args.since is not None
+    if data_free:
+        prev_max = pd.Timestamp(args.since)
+        columns = list(SCHEMA_COLUMNS)
+        existing = pd.DataFrame({"Event_Date": [prev_max],
+                                 "Fight_URL": ["(none)"]})
+        bios_all = pd.DataFrame(columns=["Fighter_Name", "Fighter_URL"])
+    else:
+        existing = load_fights()
+        columns = list(pd.read_csv(FIGHTS_CSV, nrows=0).columns)
+        prev_max = existing["Event_Date"].max()
+        bios_all = pd.read_csv(FIGHTERS_CSV, dtype=str)
     known = {fold(n) for n in bios_all["Fighter_Name"].astype(str)}
     # Folded key -> the exact spelling already in the bios, so scraped names can
     # be snapped onto it instead of being treated as new fighters.
@@ -338,7 +371,11 @@ def main() -> None:
     for n in bios_all["Fighter_Name"].astype(str):
         canon.setdefault(fold(n), n)
 
-    print(f"local data ends {prev_max.date()}  ({len(existing)} fights)")
+    if data_free:
+        print(f"discovery mode: looking for events after {prev_max.date()} "
+              "(no local dataset required)")
+    else:
+        print(f"local data ends {prev_max.date()}  ({len(existing)} fights)")
     events = discover_new_events(prev_max, args.limit)
     if not events:
         print("nothing new. Up to date.")
@@ -357,7 +394,8 @@ def main() -> None:
         print("  results table is usually scheduled-not-yet-fought, which is")
         print("  fine; anything else is a parser problem.")
 
-    problems = validate(existing, new_rows, known)
+    problems = validate(existing, new_rows, known) if not data_free else (
+        [] if new_rows else ["no new rows parsed"])
     if problems:
         print("\nVALIDATION FAILED -- nothing written:")
         for p in problems:
@@ -369,6 +407,19 @@ def main() -> None:
     stat_cols = [c for c in columns if c.startswith(("F1_", "F2_"))]
     print(f"{len(stat_cols)} per-fight stat columns left EMPTY (not zero) -- "
           "the five striking/grappling rates stay frozen for these fighters")
+
+    if args.pending_only:
+        out = Path(args.pending_only)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        with open(out, "w", encoding="utf-8", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=columns)
+            w.writeheader()
+            w.writerows(new_rows)
+        print(f"\nwrote {len(new_rows)} pending rows -> {out}")
+        print("This file is the REVIEWABLE unit: small enough to read in a pull")
+        print("request diff. Merging it does not change the training data --")
+        print("run the full refresh locally, where the CSVs live, to do that.")
+        return
 
     if not args.write:
         print(f"\nDRY RUN. Would append {len(new_rows)} rows -> "
