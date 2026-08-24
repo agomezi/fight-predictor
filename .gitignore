@@ -30,3 +30,8 @@ Handoff*.md
 REPLYING.md
 STEP-*.md
 Travel area.md
+
+# CI discovery writes newly-scraped events here so a human reviews them in a
+# pull request diff. Small by design; merging it does not touch training data.
+!pending/
+!pending/*

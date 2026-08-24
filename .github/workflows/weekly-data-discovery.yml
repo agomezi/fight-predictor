@@ -1,0 +1,110 @@
+name: Weekly data discovery
+
+# WHY THIS IS DISCOVERY AND NOT A REFRESH.
+#
+# data/ is gitignored, so a CI runner has no CSVs and cannot run the real
+# refresh or the gate -- both need the 8,658-fight dataset. Pretending otherwise
+# would produce a job that looks green and does nothing.
+#
+# So the split is: CI does the SCRAPING (which needs no dataset, via
+# refresh_data.py --since) and writes the newly-found bouts to a small file. A
+# human merges that, then runs the full refresh locally where the data lives.
+#
+# The scraped rows land in a pull request rather than a push, deliberately. A
+# ~250-row CSV diff is reviewable by eye, so the one place silent corruption
+# could enter the training data has a person standing in it. A scheduled job
+# that rewrites training data unattended is the worst outcome available here.
+
+on:
+  schedule:
+    # Mondays 09:00 UTC. Cards are Saturdays, so this catches the weekend.
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install --quiet -r requirements.txt
+
+      - name: Read the last ingested date
+        id: since
+        run: echo "date=$(cat pending/last_ingested.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Discover new events
+        id: discover
+        run: |
+          python scripts/refresh_data.py \
+            --since "${{ steps.since.outputs.date }}" \
+            --pending-only pending/new_events.csv \
+            | tee discovery.log
+          # Header-only means nothing new; anything more is worth a PR.
+          rows=$(( $(wc -l < pending/new_events.csv) - 1 ))
+          echo "rows=$rows" >> "$GITHUB_OUTPUT"
+          echo "Found $rows new bouts"
+
+      - name: Fail loudly if any event produced nothing
+        run: |
+          # refresh_data.py prints a block when an event page yields no bouts.
+          # That has silently cost the four biggest cards of a catch-up once
+          # already, so CI treats it as a failure rather than a log line.
+          if grep -q "EVENT(S) PRODUCED NOTHING" discovery.log; then
+            echo "::error::One or more events failed to parse -- see the log"
+            grep -A6 "EVENT(S) PRODUCED NOTHING" discovery.log
+            exit 1
+          fi
+
+      - name: Open a pull request
+        if: steps.discover.outputs.rows != '0'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: data/weekly-discovery
+          delete-branch: true
+          title: "Data: ${{ steps.discover.outputs.rows }} new bouts discovered"
+          commit-message: "Add ${{ steps.discover.outputs.rows }} newly discovered bouts"
+          add-paths: |
+            pending/new_events.csv
+          body: |
+            Scraped by the weekly discovery job from Wikipedia.
+            **${{ steps.discover.outputs.rows }} new bouts** since
+            `${{ steps.since.outputs.date }}`.
+
+            ### Review this diff by eye
+            It is the one point where bad data could enter training. Check the
+            fighter names, that `Winner` is one of the two, and that no
+            `Total_Fight_Time_Sec` looks impossible.
+
+            ### This does not change the model
+            Merging adds a staging file only. To actually ingest:
+
+            ```bash
+            python scripts/refresh_data.py --write --add-bio-stubs
+            python scripts/test_leakage.py
+            python scripts/test_matchup.py
+            python scripts/evaluate_models.py
+            ```
+
+            Walk-forward accuracy must stay near **0.6107 +/- 0.0291**. A jump
+            to 0.70 is a bug report, not a win. Then bump
+            `pending/last_ingested.txt`.
+
+            ### Known limitation
+            Wikipedia carries results but no per-fight stats, so
+            `sig_landed_pm`, `sig_absorbed_pm`, `td_landed_p15m`,
+            `sub_att_p15m` and `ctrl_frac` stay frozen for any fighter appearing
+            here. 9 of the 14 rolling features refresh; 5 do not.
+
+      - name: Report when nothing is new
+        if: steps.discover.outputs.rows == '0'
+        run: echo "No events since ${{ steps.since.outputs.date }}. Nothing to do."
