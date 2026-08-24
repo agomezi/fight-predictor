@@ -206,10 +206,25 @@ def main() -> None:
                     help="add rolling + Elo features")
     ap.add_argument("--yes", "-y", action="store_true",
                     help="accept the top name suggestion without asking")
-    ap.add_argument("--with-weight", action="store_true",
-                    help="add the weight / cut-burden features. OFF by default: "
-                         "measured at 0.6045 walk-forward against the incumbent "
-                         "0.6107, i.e. it did not clear its bar")
+    # ON by default, and this is a DECLARED DESIGN CHOICE rather than an
+    # empirical win -- the distinction matters and the README says so too.
+    #
+    # Measured over 8 walk-forward folds: weight_diff on its own is free
+    # (0.6110 against the incumbent 0.6107, log loss 0.6622 against 0.6624, and
+    # a TIGHTER fold sd of 0.0254 against 0.0291). cut_burden_diff costs about
+    # 0.008 accuracy, which is a quarter of the fold sd and well inside noise.
+    # The earlier "weight does not pay" reading came from testing all four
+    # columns as a bundle, which diluted the sqrt(n) per-node feature sample.
+    #
+    # Why carry the cut-burden cost anyway: it is the only feature that responds
+    # to --division, so without it the tool cannot distinguish a bout contracted
+    # at welterweight from the same pair at heavyweight -- and that question is
+    # most of what a person types into a predictor. Paying an unmeasurable
+    # accuracy cost to answer a question the user is actually asking is a
+    # reasonable trade, made explicitly. --no-weight turns it off.
+    ap.add_argument("--no-weight", dest="with_weight", action="store_false",
+                    help="drop the weight / cut-burden features (on by default)")
+    ap.set_defaults(with_weight=True)
 
     # A misspelled flag ("--divsion") is the same class of miss as a misspelled
     # fighter name, and deserves the same treatment. argparse's own
