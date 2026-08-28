@@ -49,12 +49,22 @@ from src.features import (
     is_title_bout,
     is_womens_bout,
 )
-from src.history import AS_OF_FEATURES, features_as_of, prior_for
+from src.history import (
+    AS_OF_FEATURES,
+    OPPONENT_QUALITY_KEYS,
+    features_as_of,
+    prior_for,
+)
 
 # Rolling features are compared as A-minus-B differences, exactly like the
 # static ones, so the symmetry that makes the label meaningful is preserved.
 # support is a flag about the row, not a difference, so it is carried per side.
 ROLLING_DIFF_NAMES = tuple(f"{k}_diff" for k in AS_OF_FEATURES)
+
+# Strength-of-schedule differences, opt-in. See history.OpponentQualityIndex for
+# why this is not the Elo situation (0.31 collinear, not 0.84).
+OPPONENT_ADJ_NAMES = tuple(f"{k}_diff" for k in OPPONENT_QUALITY_KEYS) + \
+    tuple(f"{k}_diff_missing" for k in OPPONENT_QUALITY_KEYS)
 
 
 def division_of(weight_lbs) -> str:
@@ -187,7 +197,8 @@ class FighterBios:
 def build_matchup_row(fighter_a_url: str, fighter_b_url: str, division,
                       as_of_date, bios: FighterBios,
                       index=None, priors: dict = None,
-                      elo_ratings: dict = None, rounds=None) -> dict:
+                      elo_ratings: dict = None, rounds=None,
+                      opponent_index=None) -> dict:
     """The feature row for A versus B, in `division`, as known on `as_of_date`.
 
     Args:
@@ -282,12 +293,25 @@ def build_matchup_row(fighter_a_url: str, fighter_b_url: str, division,
         row[f"{key}_diff_missing"] = missing
     row["support_A"] = a_feat.get("support", "none")
     row["support_B"] = b_feat.get("support", "none")
+
+    if opponent_index is not None:
+        # Same flag-and-impute policy as every other diff: a debutant has no
+        # schedule, which is unknown rather than zero.
+        a_sos = opponent_index.strength_of_schedule(fighter_a_url, when)
+        b_sos = opponent_index.strength_of_schedule(fighter_b_url, when)
+        for key in OPPONENT_QUALITY_KEYS:
+            av, bv = a_sos.get(key, np.nan), b_sos.get(key, np.nan)
+            value = np.nan if (pd.isna(av) or pd.isna(bv)) else float(av) - float(bv)
+            missing = bool(pd.isna(value))
+            row[f"{key}_diff"] = 0.0 if missing else value
+            row[f"{key}_diff_missing"] = missing
     return row
 
 
 def feature_columns(with_rolling: bool = False,
                     with_bout_context: bool = False,
-                    with_weight: bool = False) -> list:
+                    with_weight: bool = False,
+                    with_opponent_adj: bool = False) -> list:
     """The model's column list, in the one order both paths must agree on."""
     cols = list(FEATURE_NAMES)
     if with_rolling:
@@ -296,12 +320,14 @@ def feature_columns(with_rolling: bool = False,
         cols += list(BOUT_CONTEXT_NAMES)
     if with_weight:
         cols += list(WEIGHT_NAMES)
+    if with_opponent_adj:
+        cols += list(OPPONENT_ADJ_NAMES)
     return cols
 
 
 def build_training_matrix(features: pd.DataFrame, bios: "FighterBios",
                           index=None, priors: dict = None,
-                          elo_index=None, columns=None):
+                          elo_index=None, columns=None, opponent_index=None):
     """Build (X, y, columns) for historical fights through build_matchup_row.
 
     The reason this lives here rather than in each script: training-matrix
@@ -337,6 +363,7 @@ def build_training_matrix(features: pd.DataFrame, bios: "FighterBios",
             r.fighter_A_url, r.fighter_B_url, r.Weight_Class, r.Event_Date,
             bios, index=index, priors=priors, elo_ratings=elo,
             rounds=getattr(r, "scheduled_rounds", None),
+            opponent_index=opponent_index,
         ))
     X = rows_to_matrix(rows, cols)
     y = features["label"].to_numpy(dtype=int)
@@ -358,7 +385,8 @@ def rows_to_matrix(rows, feature_names=None):
     if "stance_unknown" in names:
         frame["stance_unknown"] = (frame["stance_matchup"] == "Unknown").astype(float)
     for flag in ("is_title_bout", "is_womens_bout", "is_nonstandard_weight",
-                 "scheduled_rounds_missing"):
+                 "scheduled_rounds_missing", "sos_win_rate_diff_missing",
+                 "sos_n_fights_diff_missing"):
         if flag in names and flag in frame.columns:
             frame[flag] = frame[flag].astype(float)
     for n in names:
