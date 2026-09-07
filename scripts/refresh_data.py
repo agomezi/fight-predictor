@@ -54,6 +54,13 @@ from scripts.scrape_event_context import fetch, strip_tags  # noqa: E402
 
 from src.data_loading import FIGHTERS_CSV, FIGHTS_CSV, load_fights  # noqa: E402
 
+# Fighter names carry diacritics that a cp1252 Windows console cannot encode,
+# and printing one killed the whole ingest mid-validation. The names are the
+# reason to read this output at all, so widen the stream rather than strip them.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 WIKI = "https://en.wikipedia.org/wiki/"
 LIST_PAGE = WIKI + "List_of_UFC_events"
 OUT_DEFAULT = REPO / "data" / "ufc_gold_dataset_refreshed.csv"
