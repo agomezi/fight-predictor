@@ -66,7 +66,9 @@ jobs:
           fi
 
       - name: Open a pull request
+        id: pr
         if: steps.discover.outputs.rows != '0'
+        continue-on-error: true
         uses: peter-evans/create-pull-request@v6
         with:
           branch: data/weekly-discovery
@@ -104,6 +106,35 @@ jobs:
             `sig_landed_pm`, `sig_absorbed_pm`, `td_landed_p15m`,
             `sub_att_p15m` and `ctrl_frac` stay frozen for any fighter appearing
             here. 9 of the 14 rolling features refresh; 5 do not.
+
+      - name: Explain a failed pull request instead of just dying
+        # The scraping and the branch push both succeed on their own. Only the
+        # PR-opening call needs a permission the repo can withhold, and when it
+        # is withheld the raw failure reads like the scraper broke. It did not.
+        # So the PR step is allowed to fail, and this step turns that failure
+        # into the one sentence that actually fixes it.
+        if: steps.discover.outputs.rows != '0' && steps.pr.outcome == 'failure'
+        run: |
+          echo "::error::Scraped ${{ steps.discover.outputs.rows }} bouts fine, but could not open the PR."
+          cat <<'MSG'
+          The data is NOT lost. It is pushed to the branch:
+
+              data/weekly-discovery
+
+          Only the pull-request call failed. The usual cause is the repo switch
+
+              Settings -> Actions -> General -> Workflow permissions
+              [ ] Allow GitHub Actions to create and approve pull requests
+
+          being unchecked; the workflow's own `permissions:` block cannot
+          override it. If that box is greyed out, the restriction is set at the
+          user/org level and has to be lifted there first.
+
+          To open the PR by hand in the meantime:
+
+              gh pr create --base main --head data/weekly-discovery                 --title "Data: new bouts discovered"
+          MSG
+          exit 1
 
       - name: Report when nothing is new
         if: steps.discover.outputs.rows == '0'
