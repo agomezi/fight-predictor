@@ -24,7 +24,13 @@ expanding-window walk-forward folds**, not a single held-out tail.
 | **+ rolling as-of-fight form (22 cols)** | **0.6107** | 0.0291 | **0.6624** |
 | gradient boosting, same features | 0.6082 | 0.0241 | 0.6615 |
 
-**0.611 accuracy / 0.662 log loss** is the honest number. For scale:
+**0.611 accuracy / 0.662 log loss** is the headline, with one caveat that
+belongs next to it rather than in a footnote: that figure comes from a single
+model seed, and seed 42 turned out to be the best of six tried. Averaged over
+seeds the same configuration scores **0.6059**. See
+[how small an effect can this even detect](#how-small-an-effect-can-this-even-detect).
+
+For scale:
 
 - **0.50** is the floor. The label is symmetrised — a seeded coin flip decides
   which corner becomes "fighter A" and every feature is an A-minus-B difference
@@ -55,6 +61,8 @@ Almost nothing did.
 | Forest vs a tuned single tree | +0.002 | the forest ties the best tree; bagging buys robustness, not peak accuracy |
 | Forest/booster blend | inside noise | beats the booster on log loss, not the forest |
 | Platt / isotonic calibration | inside noise | the model was already well calibrated — see below |
+| `SHRINK_ALPHA` tuning (5/10/20/40) | 5 already best | the thin tier barely moves and overall accuracy degrades |
+| Pre-UFC records (a 3-hour crawl) | **killed on arithmetic** | total headroom is +0.0105, below the harness's own detection limit |
 
 **The one thing that worked** was rolling as-of-fight form: +0.038 accuracy over
 static features, and it won **8 of 8 folds**. Everything since has been noise.
@@ -178,10 +186,25 @@ outside its training distribution. It should say so; it currently does not.
 recorded, concentrated in the 1990s. Those 633 cannot be backfilled — the source
 is behind the challenge above.
 
-**Half the dataset has a thin corner.** 25.5% of fights involve a UFC debutant
-and 55.7% have a side with under three prior fights. Those fighters fall back to
-a division prior, so the model is running largely on biometrics for them.
-Pre-UFC records would fix this and are the best remaining idea, unbuilt.
+**Thin-history rows are not the weak point — this was measured and the earlier
+version of this section was wrong.** Breaking test accuracy down by the weaker
+corner's history depth:
+
+| weaker corner | n | share | accuracy |
+|---|---|---|---|
+| none (a debutant) | 309 | 19.7% | 0.6343 |
+| thin (1–2 fights) | 390 | 24.9% | 0.6128 |
+| ok (3+ fights) | 867 | 55.4% | 0.6459 |
+
+Debutant rows score within a point of the full-history tier, and they gain the
+*most* from rolling features (+0.078 over static, against +0.040 for the other
+tiers). Taking the minimum over both corners mislabels the bucket: a debutant
+facing a fifteen-fight veteran is a well-described matchup seen from the other
+side. Knowing one fighter deeply is most of what the model needs.
+
+**Total headroom if the thin and none tiers scored like `ok` is +0.0105** — below
+the harness's minimum detectable effect (see below). That kills pre-UFC record
+scraping on arithmetic: even with perfect data it could not be shown to work.
 
 **Calibration was measured and not shipped.** Fitted on a chronological
 validation fold, Platt scaling moved test log loss by −0.0010 and isotonic made
@@ -189,6 +212,69 @@ it worse. The reliability table shows why: the populated probability bins were
 already within 0.01–0.04 of observed. Averaging 200 trees calibrates fairly well
 on its own, so there was little to correct. A parameter that buys nothing does
 not ship.
+
+---
+
+## How small an effect can this even detect?
+
+`scripts/power_analysis.py`. This turned out to be the most useful thing measured
+in the project, and it should have been done first.
+
+The shipping rule was: keep a change if the paired bootstrap excludes zero **and**
+the gain survives the fold-to-fold sd. That second clause compares a mean against
+the wrong standard deviation. The fold-to-fold sd of *accuracy* is 0.029, but most
+of that spread is era difficulty, which both variants share and which cancels in
+the per-fold difference. Measured, the sd of per-fold **differences** is 0.0113,
+so:
+
+```
+SE  = 0.0113 / sqrt(8)              = 0.0040
+MDE = (1.96 + 0.84) * 0.0040        = 0.0112   at 80% power, alpha 0.05
+```
+
+**The harness resolves about +0.011, not +0.029. The rule as written was 2.6×
+stricter than the data required.**
+
+Widening does not fix it. More folds makes the MDE *worse* (12 folds → 0.0157,
+16 → 0.0137), because each fold's test window shrinks faster than `sqrt(k)`
+helps. The best nominal MDE found (0.0102, at 20 folds) costs 1.25 points of
+measured accuracy — measuring a worse model more precisely. Eight folds stands.
+
+### The binding noise is the model seed
+
+A forest is a random procedure. Six seeds on identical data and folds:
+
+```
+42  0.6107   1337  0.6010   7  0.6062   2024  0.6064   99  0.6065   555  0.6048
+```
+
+Range 0.0097 — the same size as the MDE. Two consequences:
+
+- **Seed 42 is the best of the six.** Seed-averaged, the same configuration
+  scores **0.6059**, so the 0.6107 headline above is the luckiest seed rather
+  than a typical one. `evaluate.run_walk_forward_seeds` fixes this by averaging
+  over seeds at k× the runtime.
+- **Three retired ideas sit inside the seed band and are not reliably negative:**
+  `weight_diff` (−0.0007), boosting (−0.0025) and the weight bundle (−0.0062).
+  They are unresolvable, not refuted, and should be re-measured seed-averaged
+  before anyone repeats that they failed.
+
+Across all 15 pairwise null comparisons the paired test fired once (7% against a
+nominal 5%) — correctly calibrated within Poisson noise, so the test is sound;
+but a 1-in-20 false positive lands wherever you happen to look, and it landed on
+the first comparison tried.
+
+### And yet the plateau is real
+
+The tempting conclusion is that an underpowered test rejected good ideas. It did
+not, and it is worth being precise about why: **every retired variant was
+measured as negative, not positive-but-small.** Live Elo −0.0120, bout context
+−0.0108, pruning −0.0072, weight bundle −0.0062, boosting −0.0025. Nothing sat in
+the gap between +0.011 and +0.029 that the over-strict rule would have thrown
+away.
+
+So the ruler was too short and it did not matter. That is a less dramatic finding
+than "the test was hiding wins", and it is the one the data supports.
 
 ---
 

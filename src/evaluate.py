@@ -236,6 +236,212 @@ def paired_bootstrap_ci(y_true, p_a, p_b, metric_fn, n_boot=2000, alpha=0.05,
     return float(delta), float(lo), float(hi)
 
 
+THIN_TIER_FIGHTS = 3
+
+
+def support_tier(depth_a, depth_b, how: str = "min"):
+    """Bucket rows by how much fight history the model had to work with.
+
+    `how` is the aggregator over the two corners, and it is NOT a detail.
+
+    "min" is the obvious choice and the one predict_card reports, but it
+    mislabels rows: a debutant facing a 15-fight veteran lands in the "none"
+    bucket while actually being a well-described matchup seen from the other
+    side. Measured on this data, the "none" tier scores 0.634 -- within a point
+    of the full-history tier -- which is the signature of exactly that
+    mislabelling rather than of debutants being predictable.
+
+    So "max" (how well-known is the BETTER-known corner) and "sum" (total
+    history in the row) are offered too, and the breakdown should be read across
+    all three. If a tier gap disappears under "max" but not "min", the gap was
+    an artefact of the aggregator.
+    """
+    a = np.asarray(depth_a, dtype=float)
+    b = np.asarray(depth_b, dtype=float)
+    if how == "min":
+        d = np.minimum(a, b)
+    elif how == "max":
+        d = np.maximum(a, b)
+    elif how == "sum":
+        d = a + b
+    else:
+        raise ValueError(f"unknown aggregator {how!r}")
+    tiers = np.full(len(d), "ok", dtype=object)
+    tiers[d < THIN_TIER_FIGHTS] = "thin"
+    tiers[d == 0] = "none"
+    return tiers
+
+
+def tier_breakdown(y_true, p, depth_a, depth_b, how: str = "min") -> list:
+    """Metrics per support tier, plus the headroom if the weak tiers matched `ok`.
+
+    The headroom number is the one worth reporting: it bounds how much any
+    amount of extra history could possibly buy. If it comes in under the
+    harness's minimum detectable effect, then no feature aimed at thin-history
+    rows can be proven to work on this dataset, however good the feature is --
+    which retires a whole class of ideas on arithmetic rather than on a
+    measurement.
+    """
+    y_true = np.asarray(y_true)
+    p = np.asarray(p, dtype=float)
+    tiers = support_tier(depth_a, depth_b, how)
+    out, ok_acc = [], None
+    for name in ("none", "thin", "ok"):
+        m = tiers == name
+        if not m.any():
+            continue
+        row = {"tier": name, "n": int(m.sum()), "share": float(m.mean())}
+        for mname, fn, _ in METRICS:
+            row[mname] = fn(y_true[m], p[m])
+        out.append(row)
+        if name == "ok":
+            ok_acc = row["accuracy"]
+    if ok_acc is not None:
+        headroom = sum(
+            r["share"] * (ok_acc - r["accuracy"])
+            for r in out if r["tier"] != "ok" and r["accuracy"] < ok_acc
+        )
+        for r in out:
+            r["headroom_if_all_ok"] = headroom
+    return out
+
+
+def run_walk_forward_seeds(fit_fn_for_seed, X, y, dates, seeds,
+                           n_folds: int = 8, min_train_frac: float = 0.5):
+    """Walk-forward, averaged over several model seeds. The measured fix.
+
+    WHY THIS EXISTS. A random forest is a random procedure: the bootstrap
+    samples and per-node feature subsets depend on the seed, so two forests on
+    identical data are two different models. Measured here over six seeds on the
+    incumbent, fold-mean accuracy ranged 0.6010 to 0.6107 -- a spread of 0.0097,
+    which is the same size as the harness's minimum detectable effect of 0.0112.
+
+    That has two consequences, and they point in opposite directions:
+
+      * Any single-seed comparison of two variants is confounded by seed luck of
+        roughly the same magnitude as the effect it is trying to detect. Several
+        already-retired ideas were measured at -0.0007, -0.0025 and -0.0062,
+        all comfortably inside that band, so they are not reliably negative --
+        they are unresolvable.
+      * The published headline of 0.6107 came from seed 42, which turned out to
+        be the BEST of the six tried. Seed-averaged, the same configuration is
+        0.6059. Reporting the luckiest seed is not fraud, it is what happens by
+        default, and it is worth half a point here.
+
+    Averaging the per-fold metrics over k seeds divides the seed component of
+    the variance by k, without touching the fold structure. It costs k times the
+    runtime, which is the honest price of a number that does not move when
+    somebody changes a default.
+
+    Args:
+        fit_fn_for_seed: callable seed -> (callable (X_train, y_train) -> model).
+        seeds: iterable of seeds to average over.
+
+    Returns:
+        (averaged_rows, per_seed_rows) where averaged_rows matches
+        run_walk_forward's shape with each metric averaged across seeds.
+    """
+    per_seed = [run_walk_forward(fit_fn_for_seed(s), X, y, dates,
+                                 n_folds=n_folds, min_train_frac=min_train_frac)
+                for s in seeds]
+    lengths = {len(r) for r in per_seed}
+    if len(lengths) != 1:
+        raise ValueError(f"seeds produced differing fold counts: {lengths}")
+
+    averaged = []
+    for i in range(len(per_seed[0])):
+        base = dict(per_seed[0][i])
+        for name, _fn, _lb in METRICS:
+            base[name] = float(np.mean([r[i][name] for r in per_seed]))
+        base["n_seeds"] = len(per_seed)
+        averaged.append(base)
+    return averaged, per_seed
+
+
+def paired_fold_deltas(rows_a, rows_b, metric: str = "accuracy"):
+    """Per-fold differences between two variants scored on the SAME folds.
+
+    The distinction this exists to make. A fold's ACCURACY varies a lot across
+    folds -- roughly 0.026 here -- because eras differ in difficulty. But that
+    difficulty is shared by both variants, so it cancels in the per-fold
+    DIFFERENCE. The spread of the differences is therefore much smaller than the
+    spread of the levels, and it is the differences that carry the signal about
+    whether one variant beats another.
+
+    Comparing a mean gain against the spread of the LEVELS, which is what "the
+    gain must survive the fold-to-fold sd" literally says, compares a mean to the
+    wrong standard deviation. See minimum_detectable_effect.
+    """
+    if len(rows_a) != len(rows_b):
+        raise ValueError(f"fold counts differ: {len(rows_a)} vs {len(rows_b)}")
+    return np.array([a[metric] - b[metric] for a, b in zip(rows_a, rows_b)],
+                    dtype=float)
+
+
+def minimum_detectable_effect(sd_of_differences: float, n_folds: int,
+                              alpha: float = 0.05, power: float = 0.80) -> dict:
+    """Smallest true effect this harness could reliably detect, and the arithmetic.
+
+    The standard two-sample-means power calculation, applied to the paired
+    per-fold differences:
+
+        SE  = sd_of_differences / sqrt(n_folds)
+        MDE = (z_{1-alpha/2} + z_{power}) * SE
+
+    At alpha=0.05 two-sided and 80% power the multiplier is 1.96 + 0.84 = 2.80.
+
+    Returns the MDE alongside the inputs, because the number is meaningless
+    without them -- an MDE quoted without its sd and fold count is a claim, not a
+    measurement.
+
+    Interpretation, which is the point of computing it at all: any effect
+    SMALLER than the MDE cannot be distinguished from zero by this harness. If a
+    project has been rejecting candidate features at, say, +0.01 while its MDE is
+    +0.02, the rejections were never evidence of the features being useless. They
+    were evidence of the test being too small to tell.
+    """
+    z_alpha = 1.959963985  # two-sided 0.05
+    z_power = 0.841621234  # 80%
+    se = float(sd_of_differences) / np.sqrt(n_folds)
+    return {
+        "sd_of_differences": float(sd_of_differences),
+        "n_folds": int(n_folds),
+        "standard_error": se,
+        "multiplier": z_alpha + z_power,
+        "mde": (z_alpha + z_power) * se,
+        "alpha": alpha,
+        "power": power,
+    }
+
+
+def fold_paired_verdict(deltas, alpha: float = 0.05) -> dict:
+    """One-sample t-test on the per-fold differences. The correct paired test.
+
+    Uses the t distribution rather than the normal because 8 folds is a small
+    sample and the normal approximation is optimistic there. Falls back to a
+    normal critical value if scipy is unavailable, and says which it used, since
+    with 8 folds the difference (2.36 vs 1.96) is not cosmetic.
+    """
+    d = np.asarray(deltas, dtype=float)
+    n = len(d)
+    mean = float(d.mean())
+    sd = float(d.std(ddof=1)) if n > 1 else 0.0
+    se = sd / np.sqrt(n) if n and sd > 0 else 0.0
+    try:
+        from scipy import stats
+        crit = float(stats.t.ppf(1 - alpha / 2, df=n - 1))
+        dist = f"t(df={n - 1})"
+    except Exception:                                    # noqa: BLE001
+        crit = 1.959963985
+        dist = "normal (scipy unavailable)"
+    lo, hi = mean - crit * se, mean + crit * se
+    return {
+        "mean": mean, "sd": sd, "se": se, "n_folds": n,
+        "ci": (lo, hi), "critical_value": crit, "distribution": dist,
+        "significant": bool(se > 0 and not (lo <= 0.0 <= hi)),
+    }
+
+
 def delta_verdict(delta_ci, lower_is_better) -> str:
     """Turn a paired interval into the sentence the discipline rule asks for.
 

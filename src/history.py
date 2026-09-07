@@ -595,6 +595,84 @@ class EloIndex:
         return {str(k): float(v) for k, v in last.items()}
 
 
+class OpponentQualityIndex:
+    """Strength of schedule, as-of each fight. Same shape as EloIndex.
+
+    THE BLIND SPOT THIS FILLS. Every rolling rate treats all opposition as
+    identical. Landing 5.0 significant strikes per minute against short-notice
+    debutants and against ranked contenders are the same number to the model, and
+    a fighter who is 5-0 against regional call-ups produces the same feature
+    vector as one who is 5-0 against the top ten.
+
+    WHY IT IS NOT THE ELO SITUATION. Elo was retired for being 0.84 collinear
+    with win_rate_diff -- the UFC matchmakes on record, so a rating largely
+    restates it. Strength of schedule was predicted to fail the same way and does
+    not: measured on this data it correlates 0.31 with win_rate_diff and 0.21
+    with n_fights_diff, and carries its own label signal (+0.064 against win
+    rate's +0.169). Who you fought is genuinely not the same fact as how often
+    you won.
+
+    THE RECURSION IS THE TRAP, and it is fixed at depth one deliberately.
+    Opponent quality properly depends on their opponents' quality, and so on
+    without end. One more level would be a rating system, with all of Elo's
+    collinearity back again, and every extra level is another chance for a lookup
+    to reach forward in time. Depth one: an opponent is described by their own
+    record before the bout in question, and no further.
+
+    THE TEMPORAL BOUNDARY IS DOUBLE, which is the part worth reading twice. For
+    fighter F's bout on date D, only F's fights strictly before D count -- and
+    each of those opponents is scored by THEIR record strictly before the date
+    they met F, not by their record today. Getting the inner one wrong leaks an
+    opponent's later career backwards into a fight that has already happened, and
+    it would not look like a bug because the outer filter is still correct.
+    """
+
+    def __init__(self, log: pd.DataFrame):
+        self._prior: dict = {}
+        self._bouts: dict = {}
+        for url, grp in log.groupby("fighter_url", sort=False):
+            grp = grp.sort_values("Event_Date", kind="mergesort")
+            dates = grp["Event_Date"].to_numpy()
+            won = grp["won"].to_numpy(dtype=float)
+            opps = grp["opponent_url"].to_numpy()
+            self._bouts[url] = list(zip(dates, opps))
+            for i, dt in enumerate(dates):
+                self._prior[(url, pd.Timestamp(dt))] = (
+                    i, float(won[:i].mean()) if i else np.nan
+                )
+
+    def prior_record(self, fighter_url, as_of_date):
+        """(n_prior_fights, prior_win_rate) for a fighter at a known bout date."""
+        return self._prior.get((fighter_url, pd.Timestamp(as_of_date)),
+                               (0, np.nan))
+
+    def strength_of_schedule(self, fighter_url, as_of_date) -> dict:
+        """Average quality of the opponents met strictly before as_of_date.
+
+        NaN where there is no prior bout to average over: a debut has no
+        schedule, and that is unknown rather than zero -- the same policy the
+        rest of this module applies to absent measurements.
+        """
+        cutoff = pd.Timestamp(as_of_date)
+        win_rates, fight_counts = [], []
+        for bout_date, opponent in self._bouts.get(fighter_url, ()):
+            if pd.Timestamp(bout_date) >= cutoff:
+                continue                       # outer boundary
+            n_opp, wr_opp = self.prior_record(opponent, bout_date)  # inner
+            fight_counts.append(float(n_opp))
+            if not np.isnan(wr_opp):
+                win_rates.append(wr_opp)
+        return {
+            "sos_win_rate": float(np.mean(win_rates)) if win_rates else np.nan,
+            "sos_n_fights": float(np.mean(fight_counts)) if fight_counts else np.nan,
+            "sos_n_opponents": float(len(fight_counts)),
+        }
+
+
+# Opt-in group, matching the WEIGHT_NAMES / BOUT_CONTEXT_NAMES convention.
+OPPONENT_QUALITY_KEYS = ("sos_win_rate", "sos_n_fights")
+
+
 # ---------------------------------------------------------------------------
 # 5. Shrinkage
 # ---------------------------------------------------------------------------

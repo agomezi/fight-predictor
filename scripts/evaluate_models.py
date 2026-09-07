@@ -287,8 +287,29 @@ def main() -> None:
     rule("PAIRED DIFFERENCES — the test the discipline rule asks for")
     print("Same rows, same resample, both models. Cancels the shared test-set")
     print("noise, so it resolves differences two separate intervals cannot.\n")
-    base_label, _, p_base, y_ref = scored[0]
-    for label, _, p, _ in scored[1:]:
+    # A1: the baseline is selectable. Default is scored[0] ("static only"), so
+    # published numbers do not move, but every question since the rolling layer
+    # landed has needed "variant vs incumbent" -- computed by hand three times
+    # before this existed.
+    import argparse
+    ap = argparse.ArgumentParser(add_help=False)
+    ap.add_argument("--baseline", default=None)
+    known_args, _rest = ap.parse_known_args()
+    labels = [s_[0] for s_ in scored]
+    if known_args.baseline:
+        matches = [i for i, lb in enumerate(labels)
+                   if known_args.baseline.lower() in lb.lower()]
+        if not matches:
+            print(f"\n  --baseline {known_args.baseline!r} matched no variant. "
+                  f"Available: {labels}")
+            sys.exit(2)
+        base_idx = matches[0]
+    else:
+        base_idx = 0
+    base_label, _, p_base, y_ref = scored[base_idx]
+    others = [s_ for i, s_ in enumerate(scored) if i != base_idx]
+    print(f"baseline: {base_label}")
+    for label, _, p, _ in others:
         print(f"{label}  vs  {base_label}")
         for name, fn, lower_better in METRICS:
             d = paired_bootstrap_ci(y_ref, p, p_base, fn, n_boot=N_BOOT,

@@ -39,6 +39,7 @@ from src.features import FEATURE_NAMES, build_feature_table, to_matrix  # noqa: 
 from src.forest import RandomForest  # noqa: E402
 from src.history import (  # noqa: E402
     EloIndex,
+    OpponentQualityIndex,
     AS_OF_FEATURES,
     HistoryIndex,
     build_event_log,
@@ -247,7 +248,84 @@ def test_shuffled_label_control():
           inside >= 4, f"({inside}/{len(seeds)} seeds clear)")
 
 
-for name, fn in (("fabricated-future invariance", test_fabricated_future),
+def test_opponent_quality_boundaries():
+    """Both temporal boundaries of OpponentQualityIndex.
+
+    Strength of schedule has a boundary the other features do not, and it is the
+    one worth testing hardest. The OUTER boundary is the familiar one: only the
+    fighter's own bouts before the cutoff count. The INNER boundary is subtler --
+    each of those opponents must be scored by THEIR record before the date they
+    met this fighter, not by their record today.
+
+    Getting the inner one wrong leaks an opponent's later career backwards into a
+    fight that already happened, and it would not look like a bug because the
+    outer filter still reads correctly. So the second check below fabricates a
+    future for a PAST OPPONENT rather than for the subject.
+    """
+    oq = OpponentQualityIndex(log)
+    counts = log["fighter_url"].value_counts()
+    subj = str(counts.index[0])
+    dates = sorted(log.loc[log["fighter_url"] == subj, "Event_Date"])
+    cut = dates[len(dates) // 2]
+    base = oq.strength_of_schedule(subj, cut)
+
+    def same(a, b):
+        return all((np.isnan(a[k]) and np.isnan(b[k])) or np.isclose(a[k], b[k])
+                   for k in a)
+
+    def fab(fighter, when, n=1, tag="f"):
+        rows = []
+        for i in range(n):
+            r = {c: np.nan for c in log.columns}
+            r.update({
+                "fighter_url": fighter, "opponent_url": "http://x/fabricated",
+                "Fight_URL": f"fab-{tag}-{i}",
+                "Event_Date": pd.Timestamp(when) + pd.Timedelta(days=30 + i),
+                "Weight_Class": str(log["Weight_Class"].iloc[0]), "won": 1,
+                "is_finish": True, "Method": "KO/TKO", "End_Round": 1,
+                "fight_secs": 30.0,
+            })
+            rows.append(r)
+        return pd.concat([log, pd.DataFrame(rows)], ignore_index=True)
+
+    # OUTER: a future fight for the subject, at one day and at a year.
+    for days in (1, 365):
+        r = {c: np.nan for c in log.columns}
+        r.update({"fighter_url": subj, "opponent_url": "http://x/fabricated",
+                  "Fight_URL": f"fab-outer-{days}",
+                  "Event_Date": pd.Timestamp(cut) + pd.Timedelta(days=days),
+                  "Weight_Class": str(log["Weight_Class"].iloc[0]), "won": 1,
+                  "is_finish": True, "Method": "KO/TKO", "End_Round": 1,
+                  "fight_secs": 30.0})
+        mod = pd.concat([log, pd.DataFrame([r])], ignore_index=True)
+        got = OpponentQualityIndex(mod).strength_of_schedule(subj, cut)
+        check(f"outer boundary: a fight +{days}d leaves the past unchanged",
+              same(base, got))
+
+    # INNER: give a PAST opponent a big future. Must not move the subject.
+    prior_bouts = [(d, o) for d, o in
+                   zip(log.loc[log["fighter_url"] == subj, "Event_Date"],
+                       log.loc[log["fighter_url"] == subj, "opponent_url"])
+                   if pd.Timestamp(d) < pd.Timestamp(cut)]
+    if prior_bouts:
+        _od, opp = prior_bouts[0]
+        mod = fab(opp, cut, n=12, tag="inner")
+        got = OpponentQualityIndex(mod).strength_of_schedule(subj, cut)
+        check("inner boundary: a past opponent's 12 future wins do not move it",
+              same(base, got),
+              "(the subtle one -- opponents are scored as-of when they were met)")
+
+    # Not vacuous: the fabrication IS visible from a later cutoff.
+    mod = fab(subj, cut, n=1, tag="visible")
+    later = OpponentQualityIndex(mod).strength_of_schedule(
+        subj, pd.Timestamp(cut) + pd.Timedelta(days=400))
+    check("the fabricated fight IS counted from a later cutoff",
+          later["sos_n_opponents"] > base["sos_n_opponents"],
+          f"({base['sos_n_opponents']:.0f} -> {later['sos_n_opponents']:.0f})")
+
+
+for name, fn in (("opponent-quality boundaries", test_opponent_quality_boundaries),
+                 ("fabricated-future invariance", test_fabricated_future),
                  ("shuffled-label control", test_shuffled_label_control)):
     print()
     print("=" * 78)
