@@ -307,7 +307,8 @@ serving path and requires zero delta.
 ## Running it
 
 ```bash
-python -m venv .venv && .venv/bin/pip install -r requirements.txt
+python -m venv .venv
+.venv/bin/pip install -r requirements.txt       # .venv/Scripts/pip on Windows
 python scripts/test_leakage.py        # the gate, ~30s
 python scripts/evaluate_models.py     # the ruler, ~14 min
 python scripts/predict_card.py "Islam Makhachev" "Ilia Topuria" --with-history
