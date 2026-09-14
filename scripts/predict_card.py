@@ -293,6 +293,7 @@ def main() -> None:
         from src.history import (
             EloIndex, HistoryIndex, build_event_log, division_priors,
         )
+        print("building per-fighter history...", file=sys.stderr, flush=True)
         log, log_info = build_event_log(seed=RANDOM_SEED)
         index, priors = HistoryIndex(log), division_priors(log)
         # Elo is per-fight for training and as-of-date for serving. Both come
@@ -313,6 +314,8 @@ def main() -> None:
         cols = list(FEATURE_NAMES)
         X, y = to_matrix(train_df)
 
+    print(f"training {args.trees} trees on {len(X)} fights (about a minute)...",
+          file=sys.stderr, flush=True)
     forest = RandomForest(n_trees=args.trees, max_depth=12, min_samples_split=10,
                           min_samples_leaf=5, feature_subset="sqrt",
                           oob_score=False, random_state=RANDOM_SEED).fit(X, y)
