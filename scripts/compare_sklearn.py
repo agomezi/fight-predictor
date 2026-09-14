@@ -1,8 +1,7 @@
-"""Step 5 - sanity-check the from-scratch tree against scikit-learn.
+"""Sanity-check the from-scratch tree against scikit-learn.
 
-The point is NOT to prove the two implementations are byte-identical. They
-will not be, and expecting that misreads the exercise. The point is to
-establish that:
+The two implementations are not byte-identical and are not expected to be.
+What this establishes is narrower:
 
   1. The information-gain math agrees with an independent implementation.
   2. The split search finds the same cut point on real data.

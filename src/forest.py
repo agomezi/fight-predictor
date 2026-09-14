@@ -42,7 +42,7 @@ def bootstrap_indices(n_samples, rng):
             in_bag: int array of length n — n indices drawn from [0, n) WITH
                 replacement. Length n, not the number of distinct rows: the
                 tree must see the same sample size, duplicates included, or it
-                isn't the same learning problem.
+                is not the same learning problem.
             out_of_bag: int array of the indices in [0, n) that do NOT appear
                 in in_bag, sorted ascending. Typically ~36.8% of n, but it is a
                 random quantity — do not hardcode that fraction, and handle the

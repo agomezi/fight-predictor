@@ -30,6 +30,14 @@ Handoff*.md
 REPLYING.md
 STEP-*.md
 Travel area.md
+Revise.md
+SETUP-LAPTOP.md
+LESSONS.md
+
+# Assistant session state — personal context, never part of the repo
+memory/
+transcript/
+.claude/
 
 # CI discovery writes newly-scraped events here so a human reviews them in a
 # pull request diff. Small by design; merging it does not touch training data.

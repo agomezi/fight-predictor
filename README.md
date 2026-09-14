@@ -7,8 +7,8 @@ gradient of log loss. `scikit-learn` appears only as an independent
 implementation to check the results against.
 
 The interesting part is not the model. It is that **the measuring instrument was
-built before the things it measures**, and then used to retire most of my own
-ideas — including the two I was most confident about.
+built before the things it measures**, and then used to retire most of the
+ideas it was pointed at — including the two most plausible ones.
 
 ---
 
@@ -67,7 +67,7 @@ Almost nothing did.
 **The one thing that worked** was rolling as-of-fight form: +0.038 accuracy over
 static features, and it won **8 of 8 folds**. Everything since has been noise.
 
-### Two lessons that cost real work to learn
+### Two failure modes the harness caught
 
 **A clean number can point the wrong way.** Column pruning had the best
 single-tail log loss of any variant and was *worse* than the incumbent on the

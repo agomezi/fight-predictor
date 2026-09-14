@@ -106,7 +106,7 @@ check("predictions correlate strongly with sklearn's",
 
 print()
 print("=" * 78)
-print("MONOTONIC CONSTRAINTS — the point of the exercise")
+print("MONOTONIC CONSTRAINTS")
 print("=" * 78)
 # Feature 2 is built to MISLEAD: its true effect is mildly negative, but a
 # sparse tail (x > 2) is strongly positive. An unconstrained model will happily

@@ -334,7 +334,7 @@ for name, fn in (("opponent-quality boundaries", test_opponent_quality_boundarie
     try:
         fn()
     except NotImplementedError:
-        skip(name, "TODO(human) -- see the docstring")
+        skip(name, "not implemented -- see the docstring")
 
 print()
 print("=" * 78)
