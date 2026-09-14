@@ -314,6 +314,10 @@ python scripts/evaluate_models.py     # the ruler, ~14 min
 python scripts/predict_card.py "Islam Makhachev" "Ilia Topuria" --with-history
 ```
 
+`./predict "Islam Makhachev" "Ilia Topuria"` is the same thing without the venv
+path, and turns on `--with-history` for you. Add `--date 2026-12-12` to predict a
+future card, `--static` for the biometrics-only model.
+
 The datasets are not committed. See `data/PROVENANCE.md` for sources, checksums
 and the note on why the original scrape is not reproducible.
 

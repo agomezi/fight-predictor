@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Run the predictor without typing the venv path.
+#
+#   ./predict "Merab Dvalishvili" "Petr Yan"
+#   ./predict "Merab Dvalishvili" "Petr Yan" --date 2026-12-12
+#
+# --with-history is added automatically (the 26-column model); pass
+# --static to get the biometrics-only one instead.
+set -euo pipefail
+cd "$(dirname "$0")"
+
+for py in .venv/Scripts/python.exe .venv/bin/python; do
+    [ -x "$py" ] && PY="$py" && break
+done
+if [ -z "${PY:-}" ]; then
+    echo "No virtualenv found. Create one first:" >&2
+    echo "  python -m venv .venv && .venv/Scripts/pip install -r requirements.txt" >&2
+    exit 1
+fi
+
+args=()
+history=1
+for a in "$@"; do
+    if [ "$a" = "--static" ]; then history=0; else args+=("$a"); fi
+done
+[ "$history" -eq 1 ] && args+=(--with-history)
+
+exec "$PY" scripts/predict_card.py "${args[@]}"
