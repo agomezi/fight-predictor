@@ -7,8 +7,8 @@ gradient of log loss. `scikit-learn` appears only as an independent
 implementation to check the results against.
 
 The interesting part is not the model. It is that **the measuring instrument was
-built before the things it measures**, and then used to retire most of my own
-ideas — including the two I was most confident about.
+built before the things it measures**, and then used to retire most of the
+ideas it was pointed at — including the two most plausible ones.
 
 ---
 
@@ -67,7 +67,7 @@ Almost nothing did.
 **The one thing that worked** was rolling as-of-fight form: +0.038 accuracy over
 static features, and it won **8 of 8 folds**. Everything since has been noise.
 
-### Two lessons that cost real work to learn
+### Two failure modes the harness caught
 
 **A clean number can point the wrong way.** Column pruning had the best
 single-tail log loss of any variant and was *worse* than the incumbent on the
@@ -307,11 +307,16 @@ serving path and requires zero delta.
 ## Running it
 
 ```bash
-python -m venv .venv && .venv/bin/pip install -r requirements.txt
+python -m venv .venv
+.venv/bin/pip install -r requirements.txt       # .venv/Scripts/pip on Windows
 python scripts/test_leakage.py        # the gate, ~30s
 python scripts/evaluate_models.py     # the ruler, ~14 min
 python scripts/predict_card.py "Islam Makhachev" "Ilia Topuria" --with-history
 ```
+
+`./predict "Islam Makhachev" "Ilia Topuria"` is the same thing without the venv
+path, and turns on `--with-history` for you. Add `--date 2026-12-12` to predict a
+future card, `--static` for the biometrics-only model.
 
 The datasets are not committed. See `data/PROVENANCE.md` for sources, checksums
 and the note on why the original scrape is not reproducible.

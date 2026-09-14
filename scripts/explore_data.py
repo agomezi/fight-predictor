@@ -1,4 +1,4 @@
-"""Step 1 sanity check: load, join, and describe the UFC data.
+"""Load, join, and describe the UFC data.
 
 Run from the repo root (with the venv active):
     python scripts/explore_data.py

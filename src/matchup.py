@@ -23,9 +23,8 @@ Two modes:
                                          works today
     build_matchup_row(..., index=idx)    adds rolling + Elo diffs
 
-The static mode existing on its own is deliberate. It means a working
-predict_card.py does not have to wait for history.py, and "here is my model's
-calibrated pick for Saturday" is available now.
+The static mode existing on its own is deliberate: it means predict_card.py
+does not have to wait for history.py to return a calibrated pick.
 """
 
 from __future__ import annotations

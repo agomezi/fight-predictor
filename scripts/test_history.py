@@ -404,6 +404,6 @@ if failures:
 if skipped:
     print(f"All implemented checks pass. {len(skipped)} group(s) skipped: "
           f"{', '.join(skipped)}")
-    print("Fill the TODO(human) blocks in src/history.py to enable them.")
+    print("Implement the unfinished blocks in src/history.py to enable them.")
 else:
     print("All history checks pass.")

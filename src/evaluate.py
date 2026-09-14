@@ -42,8 +42,8 @@ import numpy as np
 # predict_proba legitimately returns exactly 0.0 or 1.0, and a single
 # confidently-wrong row would otherwise make log loss infinite.
 #
-# Worth understanding rather than accepting: the clip does not merely avoid a
-# crash, it sets the price of being confidently wrong. At 1e-15 one such row
+# The clip does not merely avoid a crash, it sets the price of being
+# confidently wrong. At 1e-15 one such row
 # contributes -log(1e-15) ~ 34.5 to the sum. For a model with many pure leaves
 # -- the unpruned tree especially -- log loss therefore becomes close to "how
 # many rows did it get confidently wrong, times 34.5", and the magnitude is as
@@ -508,12 +508,11 @@ def walk_forward_folds(dates, n_folds=8, min_train_frac=0.5):
       * Test must never precede train. There is no shuffling anywhere in this
         function; if you find yourself wanting to shuffle, the fold design is
         wrong.
-      * EXPANDING vs SLIDING window is a real choice and it is yours to make.
-        Expanding (train on everything before T) uses more data each fold but
-        mixes eras, so late folds train on a 30-year mixture. Sliding (a
-        fixed-width window ending at T) keeps folds comparable to each other but
-        trains on less. Pick one, say which in the docstring, and know why --
-        this is a question an interviewer will ask.
+      * EXPANDING vs SLIDING window is a real choice. Expanding (train on
+        everything before T) uses more data each fold but mixes eras, so late
+        folds train on a 30-year mixture. Sliding (a fixed-width window ending
+        at T) keeps folds comparable to each other but trains on less. Whichever
+        is used, the docstring states which and why.
       * The last fold should reach the final date, or the most recent fights
         are silently never tested.
       * A fold whose test window comes out empty (possible when many rows share
@@ -588,7 +587,7 @@ def run_walk_forward(fit_fn, X, y, dates, n_folds=8, min_train_frac=0.5):
 def summarise_folds(rows):
     """Mean and standard deviation of each metric across folds.
 
-    The spread is the point of the exercise. A metric whose fold-to-fold
+    The spread is the point. A metric whose fold-to-fold
     standard deviation swamps the difference between two models is a metric
     that cannot distinguish them, however clean the single-split number looked.
     """
