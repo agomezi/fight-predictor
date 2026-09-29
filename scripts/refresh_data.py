@@ -1,24 +1,32 @@
-"""Append newly-completed UFC events to the fights CSV, from Wikipedia.
+"""Append newly-completed UFC events to the fights CSV, from ESPN.
 
-The model's data ends 2026-03-07 while today is later, so every prediction is
-made with Elo and rolling form frozen at March. That is a plumbing problem, not
-a modelling one, and it is the cheapest accuracy available.
+The model's data ends at the last ingest while cards keep happening, so every
+prediction made after that is served with Elo and rolling form frozen. That is a
+plumbing problem, not a modelling one, and it is the cheapest accuracy
+available.
 
-WHAT THIS CAN AND CANNOT REFRESH. Wikipedia event pages carry
-    Weight class | Winner | def. | Loser | Method | Round | Time | Notes
-and nothing else. So of the 14 rolling features, 9 refresh -- n_fights,
-win_rate, win_rate_raw, last3_win_rate, finish_rate, finished_rate,
-days_since_last, total_fight_secs, elo -- and 5 do not: sig_landed_pm,
-sig_absorbed_pm, td_landed_p15m, sub_att_p15m, ctrl_frac. Those need per-fight
-stats, which only ufcstats publishes, and ufcstats now serves a JavaScript
-proof-of-work interstitial. The five stay frozen at their March values for
-fighters who have fought since. That is a real limitation and belongs in the
-README, not buried here.
+WHAT THIS REFRESHES. All 14 rolling features. That is the change: this script
+used to scrape Wikipedia, which carries results but no per-fight stats, so
+sig_landed_pm, sig_absorbed_pm, td_landed_p15m, sub_att_p15m and ctrl_frac
+stayed frozen for any fighter who had fought since the last ingest. ESPN
+publishes a full box score per bout, so those five now refresh too. See
+src/espn.py for the endpoint and for the three measured gotchas behind it.
 
-The stat columns are written EMPTY, never zero. Zero significant strikes is a
-real and terrible value; the missing-flag machinery in features_as_of handles
-absence correctly, and src/history._rate_basis now computes each rate over only
-the fights that carry it, so partial data dilutes nothing.
+WHY NOT ufcstats. It publishes the same five but now serves a JavaScript
+proof-of-work interstitial; getting past that programmatically would be
+circumventing bot detection. WHY NOT ufc.com/athlete: it publishes four of the
+five as CAREER AVERAGES AS OF TODAY, and joining those onto a historical row
+backfills a fighter's future into their past -- exactly the leakage the
+chronological split exists to prevent.
+
+CONTROL TIME BEFORE 2015 IS WRITTEN EMPTY, NOT ZERO. ESPN reports untracked
+control time as 0:00, which is indistinguishable from a real zero. The
+missing-flag machinery in features_as_of handles absence correctly; a zero would
+read as a measurement of nothing. See CTRL_TRACKED_FROM in src/espn.py.
+
+Any stat column ESPN omits is likewise written EMPTY, never zero, and
+src/history._rate_basis computes each rate over only the fights that carry it,
+so partial data dilutes nothing.
 
 SAFETY. Dry-run is the default: this prints what it would do and writes nothing
 unless --write is passed, and even then it writes a NEW file and leaves the
@@ -38,7 +46,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import html
 import re
 import sys
 import time
@@ -50,14 +57,21 @@ import pandas as pd
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
-from scripts.scrape_event_context import fetch, strip_tags  # noqa: E402
-
 from src.data_loading import FIGHTERS_CSV, FIGHTS_CSV, load_fights  # noqa: E402
+from src.espn import (  # noqa: E402
+    CTRL_TRACKED_FROM,
+    POLITE_DELAY_S,
+    extract_corner_stats,
+    fetch_card,
+    fetch_round_formats,
+    is_ufc_event,
+    iter_competitions,
+    list_events,
+    parse_clock_seconds,
+    weight_class_string,
+)
 
-WIKI = "https://en.wikipedia.org/wiki/"
-LIST_PAGE = WIKI + "List_of_UFC_events"
 OUT_DEFAULT = REPO / "data" / "ufc_gold_dataset_refreshed.csv"
-POLITE_DELAY_S = 2.0
 
 # The fights-table schema, needed by --since mode where no CSV is present to
 # read a header from. Kept in the same order as the source file.
@@ -72,163 +86,79 @@ SCHEMA_COLUMNS = (
     "F2_Ground", "Event_Date",
 )
 
-# Wikipedia's method strings -> the CSV's vocabulary. Order matters: the
-# doctor's-stoppage check must precede the generic TKO one.
-METHOD_MAP = (
-    (r"doctor", "TKO - Doctor's Stoppage"),
-    (r"decision.*unanimous", "Decision - Unanimous"),
-    (r"decision.*split", "Decision - Split"),
-    (r"decision.*majority", "Decision - Majority"),
-    (r"submission", "Submission"),
-    (r"\btko\b", "KO/TKO"),
-    (r"\bko\b", "KO/TKO"),
-    (r"disqualification|\bdq\b", "DQ"),
-    (r"no contest|\bnc\b", "NC"),
-    (r"could not continue", "Could Not Continue"),
-    (r"overturned", "Overturned"),
-)
+# Letters that NFKD does not decompose, because the diacritic is part of the
+# glyph rather than a combining mark. Without these, the stripping step below
+# DELETES them instead of folding them: "Syguła" -> "sygua", which then fails to
+# match the bios' "Sygula" and silently creates a second fighter with no
+# history. Found in the first ESPN ingest, where it split a fighter with three
+# prior UFC bouts.
+UNDECOMPOSED = {
+    "ł": "l", "Ł": "L",   # Polish l with stroke
+    "ø": "o", "Ø": "O",   # Scandinavian o with stroke
+    "đ": "d", "Đ": "D",   # d with stroke (Croatian, Vietnamese)
+    "ħ": "h", "Ħ": "H",   # h with stroke (Maltese)
+    "ß": "ss",                  # German sharp s
+    "æ": "ae", "Æ": "AE",
+    "œ": "oe", "Œ": "OE",
+    "þ": "th", "Þ": "Th",
+}
 
-
-def normalise_method(raw: str) -> str:
-    low = (raw or "").lower()
-    for pattern, out in METHOD_MAP:
-        if re.search(pattern, low):
-            return out
-    return raw.strip()
-
-
-def clean_fighter(name: str) -> str:
-    """Strip the champion marker and footnote residue from a name cell."""
-    name = re.sub(r"\(c\)|\(ic\)", "", name or "")
-    name = re.sub(r"\[[a-z0-9]+\]", "", name)
-    return re.sub(r"\s+", " ", name).strip()
+# Suffixes that distinguish a fighter from a RELATIVE, not from themselves.
+# Deliberately NOT stripped. "Jessie Rosas" and "Jesse Rosas Jr." are brothers,
+# and folding the suffix away would merge two people into one record --
+# strictly worse than the split it would fix.
+NAME_SUFFIX_NOTE = "Jr./Sr./III are load-bearing; see canonicalise()"
 
 
 def fold(name: str) -> str:
-    """Accent- and case-insensitive key, for matching names across sources."""
-    decomposed = unicodedata.normalize("NFKD", name or "")
+    """Accent- and case-insensitive key, for matching names across sources.
+
+    Maps undecomposable stroked letters explicitly BEFORE stripping, so they
+    fold rather than vanish. Suffixes are left alone on purpose -- see
+    NAME_SUFFIX_NOTE.
+    """
+    text = name or ""
+    for glyph, plain in UNDECOMPOSED.items():
+        text = text.replace(glyph, plain)
+    decomposed = unicodedata.normalize("NFKD", text)
     ascii_only = "".join(c for c in decomposed if not unicodedata.combining(c))
     return re.sub(r"[^a-z ]", "", ascii_only.lower()).strip()
-
-
-def weight_class_string(raw: str, is_title: bool) -> str:
-    """Match the CSV's conventions exactly.
-
-    Non-title: "Lightweight Bout". Title: "UFC Lightweight Title Bout".
-    Women's divisions keep their prefix, which is what the is_womens_bout flag
-    in src/features.py reads.
-    """
-    div = re.sub(r"\s+", " ", (raw or "")).strip()
-    if not div:
-        return ""
-    if is_title:
-        return f"UFC {div} Title Bout"
-    return f"{div} Bout"
-
-
-def total_seconds(end_round: int, end_time: str) -> int:
-    """Elapsed fight time. Rounds are five minutes throughout the modern era."""
-    try:
-        mm, ss = end_time.split(":")
-        return (int(end_round) - 1) * 300 + int(mm) * 60 + int(ss)
-    except (ValueError, AttributeError):
-        return 0
 
 
 def synth_fight_url(date_iso: str, a: str, b: str) -> str:
     """A stable synthetic id. Must be identical across runs, or validation
     would see the same bout as new every week and duplicate it."""
     slug = "-".join(sorted([fold(a).replace(" ", "_"), fold(b).replace(" ", "_")]))
-    return f"wiki:{date_iso}:{slug}"
+    return f"espn:{date_iso}:{slug}"
 
 
 def discover_new_events(after: pd.Timestamp, limit=None):
-    """(date, event_name) for events on the list page dated after `after`."""
-    page = fetch(LIST_PAGE)
+    """(date, event_id, event_name) for completed events dated after `after`.
+
+    ESPN's event index is per calendar year, so this walks the years the window
+    touches rather than pulling the whole history. Scheduled-but-not-yet-fought
+    cards are filtered later, in build_rows, where the bout status is visible.
+    """
+    today = pd.Timestamp.today().normalize()
     found = []
-    for table in re.findall(
-        r'<table[^>]*class="[^"]*wikitable[^"]*"[^>]*>.*?</table>', page, re.S
-    ):
-        for tr in re.findall(r"<tr[^>]*>(.*?)</tr>", table, re.S):
-            cells = [strip_tags(c)
-                     for c in re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", tr, re.S)]
-            if len(cells) < 3:
+    for year in range(after.year, today.year + 1):
+        for event_id, date_iso, name in list_events(year):
+            when = pd.to_datetime(date_iso, errors="coerce")
+            if pd.isna(when) or when <= after or when > today or not name:
                 continue
-            name, date_raw = cells[1], cells[2]
-            when = pd.to_datetime(date_raw, errors="coerce")
-            if pd.isna(when) or when <= after or not name:
+            # ESPN files Contender Series and Road to UFC under the UFC league.
+            # Those are not UFC bouts and the existing dataset contains none of
+            # them -- verified: Contender Series dates hold 0 fights while UFC
+            # cards on neighbouring dates hold full slates.
+            if not is_ufc_event(name):
                 continue
-            found.append((when.normalize(), name))
+            found.append((when.normalize(), event_id, name))
     found = sorted(set(found))
     return found[:limit] if limit else found
 
 
-def article_slug(event_name: str) -> str:
-    """Wikipedia's article title for an event, which is NOT always its full name.
-
-    Numbered pay-per-views live at "UFC 327", not
-    "UFC 327: Prochazka vs. Ulberg" -- the subtitle is on the list page but not
-    in the article title. Using the full name silently 404s, and because those
-    are precisely the numbered PPVs, the four biggest cards of the catch-up were
-    the four that went missing. Fight Nights do use their full title.
-    """
-    m = re.match(r"^(UFC\s+\d+)\s*:", event_name.strip())
-    if m:
-        return m.group(1).replace(" ", "_")
-    return event_name.replace(" ", "_")
-
-
-def parse_event(event_name: str):
-    """Fetch one event page and return its bout rows, main event first."""
-    page = fetch(WIKI + article_slug(event_name))
-    tables = re.findall(
-        r'<table[^>]*class="[^"]*(?:toccolours|wikitable)[^"]*"[^>]*>.*?</table>',
-        page, re.S,
-    )
-    bouts = []
-    for table in tables:
-        rows = []
-        for tr in re.findall(r"<tr[^>]*>(.*?)</tr>", table, re.S):
-            cells = [strip_tags(c)
-                     for c in re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", tr, re.S)]
-            rows.append(cells)
-        if not any(len(r) >= 7 and r[2].lower().startswith("def") for r in rows):
-            continue
-        for cells in rows:
-            if len(cells) < 7 or not cells[2].lower().startswith("def"):
-                continue
-            division, winner_raw, _, loser_raw = cells[0], cells[1], cells[2], cells[3]
-            method_raw, rnd, tm = cells[4], cells[5], cells[6]
-            title = "(c)" in winner_raw or "(c)" in loser_raw
-            bouts.append({
-                "division": division,
-                "winner": clean_fighter(winner_raw),
-                "loser": clean_fighter(loser_raw),
-                "method": normalise_method(method_raw),
-                "round": rnd.strip(),
-                "time": tm.strip(),
-                "is_title": title,
-            })
-        if bouts:
-            break
-    return bouts
-
-
-def canonicalise(name: str, canon: dict) -> str:
-    """Map a scraped name onto the bios CSV's exact spelling when possible.
-
-    resolve_join in src/features.py matches names EXACTLY, so "Borislav Nikolic"
-    in the bios and "Borislav Nikolic" with a diacritic from Wikipedia are two
-    different fighters as far as the pipeline is concerned, and the bout gets
-    dropped. Folding accents and case to find the existing spelling recovers
-    those without touching the core matcher, which the existing 8,400 fights
-    depend on.
-    """
-    return canon.get(fold(name), name)
-
-
 def build_rows(events, columns, canon=None, verbose=True):
-    """Turn parsed bouts into CSV rows matching the existing schema.
+    """Turn ESPN cards into CSV rows matching the existing schema.
 
     Returns (rows, failed) where `failed` names every event that produced no
     bouts. Reported loudly at the end rather than as a line that scrolls past:
@@ -237,48 +167,123 @@ def build_rows(events, columns, canon=None, verbose=True):
     """
     canon = canon or {}
     rows, failed = [], []
-    for when, name in events:
+    for when, event_id, name in events:
         date_iso = when.date().isoformat()
+        # Control time is not tracked in the old era and ESPN reports the gap as
+        # 0:00. Decided per event, since only the event knows its own date.
+        ctrl_tracked = date_iso >= CTRL_TRACKED_FROM
         try:
-            bouts = parse_event(name)
-        except Exception as exc:                        # noqa: BLE001
-            print(f"  !! {name}: fetch/parse failed ({exc}) -- skipped")
+            card = fetch_card(event_id)
+            round_formats = fetch_round_formats(event_id)
+        except RuntimeError as exc:
+            print(f"  !! {name}: fetch failed ({exc}) -- skipped")
             failed.append(name)
             continue
-        if not bouts:
-            print(f"  !! {name}: no results table found -- skipped "
-                  "(event may be scheduled, not completed)")
-            failed.append(name)
-            continue
-        for i, b in enumerate(bouts):
-            if not b["winner"] or not b["loser"]:
+
+        bouts = 0
+        for segment, competition in iter_competitions(card):
+            status = competition.get("status") or {}
+            if not ((status.get("type") or {}).get("completed")):
+                continue                       # scheduled, or still in progress
+            result = status.get("result") or {}
+
+            corners = competition.get("competitors") or []
+            if len(corners) != 2:
                 continue
-            # Five rounds for title bouts and the main event (the first bout
-            # listed); three otherwise. This mirrors the actual convention and
-            # is the same assumption build_matchup_row's rounds= default makes.
-            five = b["is_title"] or i == 0
-            secs = total_seconds(b["round"], b["time"])
+            # order 1 is ESPN's first-listed corner. Sorted explicitly rather
+            # than trusted, so F1/F2 is stable across runs -- synth_fight_url
+            # sorts its own inputs, but the stat columns do not.
+            corners = sorted(corners, key=lambda c: c.get("order", 0))
+
+            names = []
+            for corner in corners:
+                athlete = corner.get("athlete") or {}
+                names.append(canonicalise(athlete.get("displayName", ""), canon))
+            if not all(names):
+                continue
+
+            winners = [n for n, c in zip(names, corners) if c.get("winner")]
+            # A draw or no-contest has no single winner. Written blank and
+            # reported rather than guessed; validate() rejects the row, which is
+            # the honest outcome for a bout with no winner to predict.
+            winner = winners[0] if len(winners) == 1 else ""
+
+            end_round = status.get("period") or ""
+            end_time = status.get("displayClock") or ""
+            elapsed = parse_clock_seconds(end_time)
+            secs = ("" if elapsed is None or not end_round
+                    else (int(end_round) - 1) * 300 + elapsed)
+
             row = {c: "" for c in columns}
-            winner = canonicalise(b["winner"], canon)
-            loser = canonicalise(b["loser"], canon)
             row.update({
-                "Fight_URL": synth_fight_url(date_iso, winner, loser),
-                "Fighter_1": winner,
-                "Fighter_2": loser,
+                "Fight_URL": synth_fight_url(date_iso, names[0], names[1]),
+                "Fighter_1": names[0],
+                "Fighter_2": names[1],
                 "Winner": winner,
-                "Weight_Class": weight_class_string(b["division"], b["is_title"]),
-                "Method": b["method"],
-                "End_Round": b["round"],
-                "End_Time": b["time"],
+                "Weight_Class": weight_class_string(competition),
+                "Method": result.get("displayName", ""),
+                "End_Round": end_round,
+                "End_Time": end_time,
                 "Total_Fight_Time_Sec": secs,
-                "Time_Format": ("5 Rnd (5-5-5-5-5)" if five else "3 Rnd (5-5-5)"),
+                # Stated outright by ESPN, never inferred from card position.
+                # competitions[] is not ordered by card position, so the old
+                # "first bout is the main event, therefore five rounds" rule
+                # would stamp 5 Rnd onto an early prelim.
+                "Time_Format": round_formats.get(competition.get("id"), ""),
                 "Event_Date": date_iso,
             })
+
+            for prefix, corner in (("F1", corners[0]), ("F2", corners[1])):
+                stats = extract_corner_stats(corner)
+                for column, value in stats.items():
+                    if column == "ctrl_seconds":
+                        continue
+                    row[f"{prefix}_{column}"] = value
+                seconds = stats.get("ctrl_seconds")
+                row[f"{prefix}_Ctrl_Sec"] = (
+                    "" if not ctrl_tracked or seconds is None else seconds)
+
             rows.append(row)
-        if verbose:
-            print(f"  {date_iso}  {len(bouts):>2} bouts  {name}")
+            bouts += 1
+
+        if not bouts:
+            print(f"  !! {name}: no completed bouts found -- skipped "
+                  "(event may be scheduled, not completed)")
+            failed.append(name)
+        elif verbose:
+            print(f"  {date_iso}  {bouts:>2} bouts  {name}")
         time.sleep(POLITE_DELAY_S)
     return rows, failed
+
+
+# Hand-verified aliases: a fighter the source spells differently from the bios
+# in a way no general rule can safely fix. Each entry was checked against the
+# bios record (DOB, height, division, prior bouts) before being added.
+#
+# WHY NOT A RULE. The obvious rule -- strip Jr./Sr./III -- is unsafe: 13 base
+# names in the bios are shared by two rows, and some of those are RELATIVES, not
+# spellings. "Jessie Rosas" and "Jesse Rosas Jr." are brothers who have both
+# fought in the UFC, so a suffix-stripping rule would merge two people into one
+# record. That is a worse error than the split it fixes, and it would be
+# invisible afterwards. So this stays a short, explicit, auditable list.
+NAME_ALIASES = {
+    # ESPN spelling            -> bios spelling
+    "Michael Aswell": "Michael Aswell Jr.",
+}
+
+
+def canonicalise(name: str, canon: dict) -> str:
+    """Map a scraped name onto the bios CSV's exact spelling when possible.
+
+    resolve_join in src/features.py matches names EXACTLY, so "Borislav Nikolic"
+    in the bios and "Borislav Nikolic" with a diacritic from ESPN are two
+    different fighters as far as the pipeline is concerned, and the bout gets
+    dropped. Folding accents and case to find the existing spelling recovers
+    those without touching the core matcher, which the existing 8,400 fights
+    depend on.
+    """
+    name = NAME_ALIASES.get(name, name)
+    return canon.get(fold(name), name)
 
 
 def validate(existing: pd.DataFrame, new_rows, known_names) -> list:
@@ -389,7 +394,7 @@ def main() -> None:
     if failed:
         print(f"\n  {len(failed)} EVENT(S) PRODUCED NOTHING:")
         for name in failed:
-            print(f"    - {name}   (tried /wiki/{article_slug(name)})")
+            print(f"    - {name}")
         print("  Check each by hand before trusting this run. An event with no")
         print("  results table is usually scheduled-not-yet-fought, which is")
         print("  fine; anything else is a parser problem.")
@@ -405,8 +410,15 @@ def main() -> None:
           "max, winner is a participant, required fields present")
 
     stat_cols = [c for c in columns if c.startswith(("F1_", "F2_"))]
-    print(f"{len(stat_cols)} per-fight stat columns left EMPTY (not zero) -- "
-          "the five striking/grappling rates stay frozen for these fighters")
+    filled = sum(1 for c in stat_cols
+                 if any(r.get(c) != "" for r in new_rows))
+    print(f"{filled} of {len(stat_cols)} per-fight stat columns carry values "
+          "-- all 14 rolling features refresh, including the five that stayed "
+          "frozen under the Wikipedia source")
+    blank_ctrl = sum(1 for r in new_rows if r.get("F1_Ctrl_Sec") == "")
+    if blank_ctrl:
+        print(f"{blank_ctrl} row(s) have EMPTY control time (not zero): "
+              f"ESPN does not track it before {CTRL_TRACKED_FROM}")
 
     if args.pending_only:
         out = Path(args.pending_only)
@@ -441,7 +453,7 @@ def main() -> None:
                 # real measurement of nothing.
                 row = {c: "" for c in bios_all.columns}
                 row["Fighter_Name"] = n
-                row["Fighter_URL"] = f"wiki:fighter:{fold(n).replace(' ', '_')}"
+                row["Fighter_URL"] = f"espn:fighter:{fold(n).replace(' ', '_')}"
                 stub_rows.append(row)
             combined = pd.concat(
                 [bios_all, pd.DataFrame(stub_rows, columns=bios_all.columns)],

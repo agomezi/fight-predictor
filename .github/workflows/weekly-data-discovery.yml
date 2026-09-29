@@ -78,7 +78,7 @@ jobs:
           add-paths: |
             pending/new_events.csv
           body: |
-            Scraped by the weekly discovery job from Wikipedia.
+            Pulled by the weekly discovery job from ESPN.
             **${{ steps.discover.outputs.rows }} new bouts** since
             `${{ steps.since.outputs.date }}`.
 
@@ -101,11 +101,21 @@ jobs:
             to 0.70 is a bug report, not a win. Then bump
             `pending/last_ingested.txt`.
 
-            ### Known limitation
-            Wikipedia carries results but no per-fight stats, so
+            ### All 14 rolling features now refresh
+            The source is ESPN, which publishes a per-fight box score, so
             `sig_landed_pm`, `sig_absorbed_pm`, `td_landed_p15m`,
-            `sub_att_p15m` and `ctrl_frac` stay frozen for any fighter appearing
-            here. 9 of the 14 rolling features refresh; 5 do not.
+            `sub_att_p15m` and `ctrl_frac` refresh too. Under the old Wikipedia
+            source those five stayed frozen.
+
+            Two things to know when reading the diff:
+
+            * **Control time is blank, not zero, before 2015.** ESPN reports
+              untracked control time as `0:00`, which is indistinguishable from
+              a real zero, so rows before that cutoff are written empty and earn
+              a missing flag instead.
+            * **`F1/F2_Distance`, `_Clinch` and `_Ground` are always blank.**
+              The endpoint carries the head/body/leg breakdown but not the
+              standing/clinch/ground one. No feature reads those six columns.
 
       - name: Explain a failed pull request instead of just dying
         # The scraping and the branch push both succeed on their own. Only the
