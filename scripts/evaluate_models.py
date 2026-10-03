@@ -12,12 +12,27 @@ Reports proper scoring rules with bootstrap confidence intervals, a calibration
 table, and a walk-forward fold breakdown so a result can be checked for whether
 it holds across eras rather than in one window.
 
+SEEDS. A random forest's bootstrap samples and per-node feature subsets depend
+on the seed, so two forests on identical data are two different models. The
+project learned this the expensive way: the published 0.6107 headline came from
+seed 42, which was the best of six tried, against a seed-averaged 0.6059. A
+single-seed run cannot tell a real gain from seed luck, and the harness's
+minimum detectable effect drops from 0.0112 to 0.0081 when the seed component of
+the variance is divided by k.
+
+So --seeds averages the walk-forward metrics over several model seeds. The
+default stays a single seed, because changing it would silently move every
+published number in the README; pass --seeds when comparing two variants, which
+is when it matters.
+
 Run from the repo root (venv active):
     python scripts/evaluate_models.py
+    python scripts/evaluate_models.py --seeds 42,7,1234,2024,99
 """
 
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -37,6 +52,7 @@ from src.evaluate import (  # noqa: E402
     reference_scores,
     reliability_table,
     run_walk_forward,
+    run_walk_forward_seeds,
     summarise_folds,
 )
 from src.features import (  # noqa: E402
@@ -62,6 +78,10 @@ from src.tree import DecisionTree  # noqa: E402
 RANDOM_SEED = 42
 N_BOOT = 2000
 
+# Parsed in main() and read by the walk-forward sections. A single seed keeps
+# the published numbers reproducible; several averages the seed noise out.
+SEEDS = (RANDOM_SEED,)
+
 # (label, factory) -- factories so walk-forward can refit per fold.
 MODELS = (
     ("tree, depth 4 (fixed)",
@@ -75,13 +95,50 @@ MODELS = (
 )
 
 
+def seeded_model(factory, seed):
+    """Build a model from `factory`, overriding its seed where it has one.
+
+    MODELS holds zero-argument factories so walk-forward can refit per fold. The
+    forest takes random_state; the trees are deterministic and take none, so
+    they are returned unchanged and averaging over seeds simply repeats them.
+    """
+    model = factory()
+    if hasattr(model, "random_state"):
+        model.random_state = seed
+    return model
+
+
 def rule(title):
     print("\n" + "=" * 78)
     print(title)
     print("=" * 78)
 
 
+def parse_seeds(argv=None) -> tuple:
+    """Read --seeds from the command line, defaulting to the single seed.
+
+    Kept separate from the --baseline parser further down because the seeds are
+    needed before any model is fitted, and that parser runs after the feature
+    sets have already been scored.
+    """
+    ap = argparse.ArgumentParser(add_help=False)
+    ap.add_argument("--seeds", default=None,
+                    help="comma-separated model seeds to average over, "
+                         "e.g. 42,7,1234. Default: a single seed.")
+    known, _ = ap.parse_known_args(argv)
+    if not known.seeds:
+        return (RANDOM_SEED,)
+    seeds = tuple(int(tok) for tok in known.seeds.split(",") if tok.strip())
+    return seeds or (RANDOM_SEED,)
+
+
 def main() -> None:
+    global SEEDS
+    SEEDS = parse_seeds()
+    if len(SEEDS) > 1:
+        print(f"seed-averaging over {len(SEEDS)} seeds: {SEEDS}")
+        print("Walk-forward metrics are means across seeds; the single-split")
+        print("and bootstrap sections still use the first seed only.")
     features, stats = build_feature_table(seed=RANDOM_SEED)
     train_df, test_df = chronological_split(features, test_frac=0.18)
     X_train, y_train = to_matrix(train_df)
@@ -155,9 +212,14 @@ def main() -> None:
     X_all, y_all = to_matrix(ordered)
     try:
         for label, factory in MODELS:
-            rows = run_walk_forward(
-                lambda Xt, yt, f=factory: f().fit(Xt, yt),
-                X_all, y_all, dates.to_numpy(), n_folds=8, min_train_frac=0.5,
+            # seed_factory re-creates the model with a given seed. A tree is
+            # deterministic, so averaging it over seeds is a no-op rather than a
+            # special case -- one code path keeps the two tables comparable.
+            rows, _per_seed = run_walk_forward_seeds(
+                lambda sd, f=factory: (
+                    lambda Xt, yt: seeded_model(f, sd).fit(Xt, yt)),
+                X_all, y_all, dates.to_numpy(), SEEDS,
+                n_folds=8, min_train_frac=0.5,
             )
             print(f"\n{label}")
             print(f"  {'fold':>4}{'n_train':>9}{'n_test':>8}  {'test window':<25}"
@@ -291,7 +353,6 @@ def main() -> None:
     # published numbers do not move, but every question since the rolling layer
     # landed has needed "variant vs incumbent" -- computed by hand three times
     # before this existed.
-    import argparse
     ap = argparse.ArgumentParser(add_help=False)
     ap.add_argument("--baseline", default=None)
     known_args, _rest = ap.parse_known_args()
@@ -336,12 +397,12 @@ def main() -> None:
     dates_all = ordered_all["Event_Date"].to_numpy()
     for label, kw in variants:
         Xa, ya, _cols = build_training_matrix(ordered_all, bios, **kw)
-        rows = run_walk_forward(
-            lambda Xt, yt: RandomForest(
+        rows, _per_seed = run_walk_forward_seeds(
+            lambda sd: (lambda Xt, yt: RandomForest(
                 n_trees=100, max_depth=12, min_samples_split=10,
                 min_samples_leaf=5, feature_subset="sqrt", oob_score=False,
-                random_state=RANDOM_SEED).fit(Xt, yt),
-            Xa, ya, dates_all, n_folds=8, min_train_frac=0.5,
+                random_state=sd).fit(Xt, yt)),
+            Xa, ya, dates_all, SEEDS, n_folds=8, min_train_frac=0.5,
         )
         summary = summarise_folds(rows)
         accs = " ".join(f"{r['accuracy']:.3f}" for r in rows)
