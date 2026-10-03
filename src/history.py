@@ -97,6 +97,19 @@ AS_OF_FEATURES = (
 # Both are computable only now: End_Round per bout came in with the ESPN
 # ingest. Both are as-of-date by construction, from fights strictly before the
 # cutoff, and both get a leakage boundary test.
+# MEASURED BEFORE FITTING ANYTHING, on 1,500 sampled as-of rows:
+#
+#   column               defined   corr with finish_rate
+#   recent_finish_rate     74.5%                   0.811
+#   finish_round_mean      61.8%                  -0.105
+#
+# recent_finish_rate is 0.811 collinear with the finish_rate column it is meant
+# to refine. That is the Elo situation -- Elo was retired at 0.84 against
+# win_rate_diff -- and it is a reason to expect this half to pay nothing.
+# finish_round_mean at -0.105 is genuinely new: how EARLY a fighter finishes is
+# not recoverable from how OFTEN they finish. Recorded here rather than left in
+# a transcript, because a prediction made before the measurement is worth more
+# than one made after.
 RECENT_N = 5
 
 # A fighter with no finishes has no round to average. Writing 0 would say
@@ -399,21 +412,45 @@ def finish_quality_as_of(past) -> dict:
             scarce enough that a five-fight window is mostly empty). NaN when
             they have never finished anyone, for the same reason.
 
-    TODO(human): implement both.
-
-    Three things worth getting right, each of which is a real trap:
+    Three things this gets right, each of which is a real trap:
       * The window is the last RECENT_N FIGHTS, not the last RECENT_N WINS.
         Taking the last five wins reaches arbitrarily far back in time and
         quietly undoes the recency the feature exists to add.
-      * End_Round arrives as a string in the raw table and can be empty. Coerce
-        it, and drop rows where it does not parse rather than treating a failed
-        parse as round 0.
-      * Return NaN, never a sentinel, when the quantity is undefined. Both
-        callers below depend on it: _debut_features returns NaN for these keys,
-        and the missing-flag machinery in features.py turns NaN into an explicit
-        "this was unknown" column rather than a number the tree can split on.
+      * End_Round arrives as a string in the raw table and can be empty. It is
+        coerced, and rows where it does not parse are dropped rather than
+        treated as round 0. In the current data every value parses, but
+        build_event_log passes the column through without enforcing a dtype, so
+        a future ingest -- a no-contest, a cancelled bout -- could carry a blank
+        and must not silently become "finished in round zero".
+      * NaN, never a sentinel, when the quantity is undefined. Both callers
+        depend on it: _debut_features returns NaN for these keys, and the
+        missing-flag machinery in features.py turns NaN into an explicit "this
+        was unknown" column rather than a number the tree can split on.
     """
-    raise NotImplementedError("TODO(human): implement finish_quality_as_of")
+    if past is None or len(past) == 0:
+        return {k: np.nan for k in FINISH_QUALITY_KEYS}
+
+    # RECENT WINDOW: the last RECENT_N FIGHTS, then the wins within them.
+    # Slicing fights-then-filtering is the whole point. Filtering to wins first
+    # and taking the last five would reach back as far as it needed to find
+    # five, which is exactly the recency this feature exists to add.
+    recent = past.iloc[-RECENT_N:]
+    recent_wins = recent[recent["won"] == 1]
+    recent_finish_rate = (float(recent_wins["is_finish"].mean())
+                          if len(recent_wins) else np.nan)
+
+    # FINISH ROUND: over finishing wins in the WHOLE history, not the recent
+    # window. Finishes are scarce -- a five-fight window is empty for most
+    # fighters -- so restricting this one to the window would make it NaN far
+    # more often than it is informative.
+    finishing_wins = past[(past["won"] == 1) & (past["is_finish"].astype(bool))]
+    rounds = pd.to_numeric(finishing_wins["End_Round"], errors="coerce").dropna()
+    finish_round_mean = float(rounds.mean()) if len(rounds) else np.nan
+
+    return {
+        "recent_finish_rate": recent_finish_rate,
+        "finish_round_mean": finish_round_mean,
+    }
 
 
 def features_as_of(index: "HistoryIndex", fighter_url: str, as_of_date,

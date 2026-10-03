@@ -63,6 +63,7 @@ Almost nothing did.
 | Platt / isotonic calibration | inside noise | the model was already well calibrated — see below |
 | `SHRINK_ALPHA` tuning (5/10/20/40) | 5 already best | the thin tier barely moves and overall accuracy degrades |
 | Pre-UFC records (a 3-hour crawl) | **killed on arithmetic** | total headroom is +0.0105, below the harness's own detection limit |
+| Finish quality (recency + round) | 0.6037 — retired | `recent_finish_rate` is 0.811 collinear with the `finish_rate` it refines; predicted before fitting |
 
 **The one thing that worked** was rolling as-of-fight form: +0.038 accuracy over
 static features, and it won **8 of 8 folds**. Everything since has been noise.

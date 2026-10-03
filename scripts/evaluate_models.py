@@ -273,28 +273,25 @@ def main() -> None:
               columns=feature_columns(with_rolling=True, with_bout_context=True))),
     )
 
-    # Finish quality, opt-in and measured like everything else. Skipped
-    # automatically while finish_quality_as_of is unimplemented, so this script
-    # keeps running rather than dying on a feature that is still a skeleton.
-    try:
-        from src.history import finish_quality_as_of as _fq
-        import pandas as _pd
-        _fq(_pd.DataFrame({"won": [], "is_finish": [], "End_Round": []}))
-        _fq_ready = True
-    except NotImplementedError:
-        _fq_ready = False
-    except Exception:                                    # noqa: BLE001
-        _fq_ready = True
-    if _fq_ready:
-        variants = variants + ((
-            "+ rolling + finish quality",
-            dict(index=hist, priors=priors, elo_index=None,
-                 columns=feature_columns(with_rolling=True,
-                                         with_finish_quality=True)),
-        ),)
-    else:
-        print("\n  NOTE: finish-quality variant skipped -- "
-              "finish_quality_as_of is not implemented yet.")
+    # Finish quality -- MEASURED AND RETIRED, kept in the table so the result
+    # stays visible rather than becoming a claim in a commit message.
+    #
+    #   paired, 3 seeds x 8 folds, against the incumbent:
+    #     accuracy  -0.0008  CI [-0.0053, +0.0037]   inside noise
+    #     log_loss  -0.0001  CI [-0.0015, +0.0014]   inside noise
+    #     brier     -0.0000  CI [-0.0007, +0.0007]   inside noise
+    #
+    # Predicted before fitting, from a 0.811 correlation between
+    # recent_finish_rate and the finish_rate it refines: that half would pay
+    # nothing, for the same reason Elo did not at 0.84 against win_rate_diff.
+    # finish_round_mean was the genuinely new column at -0.105, and it did not
+    # carry the variant on its own. Thirteen ideas measured, twelve retired.
+    variants = variants + ((
+        "+ rolling + finish quality",
+        dict(index=hist, priors=priors, elo_index=None,
+             columns=feature_columns(with_rolling=True,
+                                     with_finish_quality=True)),
+    ),)
 
     # STEP A's subtraction test, in the same pass: drop the collinear cluster
     # HANDBACK-4 identified. With sqrt(n) columns sampled per node, redundant

@@ -293,7 +293,13 @@ def build_matchup_row(fighter_a_url: str, fighter_b_url: str, division,
                             priors=priors, elo_ratings=elo_ratings)
     b_feat = features_as_of(index, fighter_b_url, when, weight_class=division,
                             priors=priors, elo_ratings=elo_ratings)
-    for key in AS_OF_FEATURES:
+    # FINISH_QUALITY_KEYS are emitted alongside AS_OF_FEATURES but are NOT in
+    # it: being in AS_OF_FEATURES would put them in ROLLING_DIFF_NAMES and so
+    # into the default column set, which an unmeasured feature does not get to
+    # do. They are built here so feature_columns(with_finish_quality=True) has
+    # real columns to select; without this loop the opt-in names would resolve
+    # to nothing.
+    for key in tuple(AS_OF_FEATURES) + tuple(FINISH_QUALITY_KEYS):
         av, bv = a_feat.get(key, np.nan), b_feat.get(key, np.nan)
         value = np.nan if (pd.isna(av) or pd.isna(bv)) else float(av) - float(bv)
         missing = bool(pd.isna(value))

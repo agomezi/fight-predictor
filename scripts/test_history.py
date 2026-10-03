@@ -29,7 +29,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.data_loading import load_fights  # noqa: E402
 from src.features import build_feature_table  # noqa: E402
-from src.history import (  # noqa: E402
+from src.history import (
+    FINISH_QUALITY_KEYS,  # noqa: E402
     AS_OF_FEATURES,
     SECS_PER_15M,
     EloIndex,
@@ -149,9 +150,14 @@ debut_date = first.iloc[0]
 try:
     d = features_as_of(idx, debut_url, debut_date,
                        weight_class="Lightweight Bout", priors=priors)
+    # FINISH_QUALITY_KEYS are emitted by features_as_of but deliberately kept
+    # OUT of AS_OF_FEATURES, so they do not reach the default column set. The
+    # contract is still exact -- it just has two parts now.
+    expected = set(AS_OF_FEATURES) | set(FINISH_QUALITY_KEYS) | {"support"}
     check("returns exactly the AS_OF_FEATURES keys plus support",
-          set(d) == set(AS_OF_FEATURES) | {"support"},
-          f"(unexpected: {sorted(set(d) - set(AS_OF_FEATURES) - {'support'})})")
+          set(d) == expected,
+          f"(unexpected: {sorted(set(d) - expected)}; "
+          f"missing: {sorted(expected - set(d))})")
     check("a fighter's own first fight is the debut path",
           d["support"] == "none" and d["n_fights"] == 0)
     check("debut rates fall back to the prior, not to zero",
