@@ -71,6 +71,12 @@ from src.espn import (  # noqa: E402
     weight_class_string,
 )
 
+# Fighter names carry diacritics that a cp1252 Windows console cannot encode,
+# and printing one killed the whole ingest mid-validation. The names are the
+# reason to read this output at all, so widen the stream rather than strip them.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
 OUT_DEFAULT = REPO / "data" / "ufc_gold_dataset_refreshed.csv"
 
 # The fights-table schema, needed by --since mode where no CSV is present to
