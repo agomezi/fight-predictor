@@ -50,6 +50,7 @@ from src.features import (
 )
 from src.history import (
     AS_OF_FEATURES,
+    FINISH_QUALITY_KEYS,
     OPPONENT_QUALITY_KEYS,
     features_as_of,
     prior_for,
@@ -59,6 +60,14 @@ from src.history import (
 # static ones, so the symmetry that makes the label meaningful is preserved.
 # support is a flag about the row, not a difference, so it is carried per side.
 ROLLING_DIFF_NAMES = tuple(f"{k}_diff" for k in AS_OF_FEATURES)
+# Opt-in, like the weight and bout-context blocks: adding these to
+# AS_OF_FEATURES instead would silently change the default column set and move
+# every published number. A measured-not-assumed feature does not get to do
+# that before it has been measured.
+FINISH_QUALITY_NAMES = (
+    tuple(f"{k}_diff" for k in FINISH_QUALITY_KEYS)
+    + tuple(f"{k}_diff_missing" for k in FINISH_QUALITY_KEYS)
+)
 
 # Strength-of-schedule differences, opt-in. See history.OpponentQualityIndex for
 # why this is not the Elo situation (0.31 collinear, not 0.84).
@@ -310,7 +319,8 @@ def build_matchup_row(fighter_a_url: str, fighter_b_url: str, division,
 def feature_columns(with_rolling: bool = False,
                     with_bout_context: bool = False,
                     with_weight: bool = False,
-                    with_opponent_adj: bool = False) -> list:
+                    with_opponent_adj: bool = False,
+                    with_finish_quality: bool = False) -> list:
     """The model's column list, in the one order both paths must agree on."""
     cols = list(FEATURE_NAMES)
     if with_rolling:
@@ -321,6 +331,8 @@ def feature_columns(with_rolling: bool = False,
         cols += list(WEIGHT_NAMES)
     if with_opponent_adj:
         cols += list(OPPONENT_ADJ_NAMES)
+    if with_finish_quality:
+        cols += list(FINISH_QUALITY_NAMES)
     return cols
 
 
