@@ -80,6 +80,31 @@ AS_OF_FEATURES = (
     "elo",                # pre-fight rating from run_elo
 )
 
+# FINISH QUALITY, measured opt-in -- see FINISH_QUALITY_KEYS below.
+#
+# finish_rate already exists, but it is career-long and unweighted: a round-one
+# knockout last month and a round-three TKO in 2019 count the same, and a
+# fighter who finished three opponents in 2017 and has gone to decision ever
+# since reads as a finisher. Two things the existing column cannot say:
+#
+#   recent_finish_rate  the same quantity over the last RECENT_N fights only,
+#                       which is to finish_rate what last3_win_rate is to
+#                       win_rate -- the project already accepts that framing.
+#   finish_round_mean   how EARLY the finishes came, in rounds. A first-round
+#                       finisher and a third-round one are different fighters
+#                       and finish_rate scores them identically.
+#
+# Both are computable only now: End_Round per bout came in with the ESPN
+# ingest. Both are as-of-date by construction, from fights strictly before the
+# cutoff, and both get a leakage boundary test.
+RECENT_N = 5
+
+# A fighter with no finishes has no round to average. Writing 0 would say
+# "finished in round zero", which is not a thing; the column is left NaN and the
+# missing-flag path in features.py handles it, exactly as the five per-fight
+# stat rates do.
+FINISH_QUALITY_KEYS = ("recent_finish_rate", "finish_round_mean")
+
 ELO_INITIAL = 1500.0
 ELO_K = 24.0
 # Fewer than this many prior fights and the rolling rates are mostly noise.
@@ -274,6 +299,7 @@ def _debut_features(prior: dict, elo: float) -> dict:
         "last3_win_rate": prior["win_rate"],
         "finish_rate": prior["finish_rate"],
         "finished_rate": prior["finished_rate"],
+        **{k: np.nan for k in FINISH_QUALITY_KEYS},
         "sig_landed_pm": np.nan,
         "sig_absorbed_pm": np.nan,
         "td_landed_p15m": np.nan,
@@ -344,6 +370,50 @@ def _fraction_of_time(frame, column):
     if not np.isfinite(stat) or not np.isfinite(secs) or secs <= 0.0:
         return np.nan
     return stat / secs
+
+
+def finish_quality_as_of(past) -> dict:
+    """Recency- and round-weighted finish signal, from `past` only.
+
+    `past` is already filtered to fights STRICTLY BEFORE the cutoff by
+    features_as_of, so this function must not reach for any other data -- that
+    filter is the entire leakage boundary and re-deriving it here would be a
+    second place for it to go wrong.
+
+    Args:
+        past: this fighter's prior fights, ascending by date, carrying at least
+            `won` (1/0), `is_finish` (bool) and `End_Round`.
+
+    Returns:
+        dict with exactly FINISH_QUALITY_KEYS:
+
+        recent_finish_rate: over the last RECENT_N fights only, the fraction of
+            this fighter's WINS that were finishes. Conditional on winning, the
+            same way finish_rate is -- a fighter who lost four of their last
+            five has one win to judge, not five. With no wins in the window the
+            value is NaN, NOT 0.5 and NOT 0: the missing-flag path reads NaN as
+            "unknown", while 0 would assert they never finish anyone.
+
+        finish_round_mean: the mean End_Round over this fighter's finishing
+            WINS in the whole history (not just the recent window -- rounds are
+            scarce enough that a five-fight window is mostly empty). NaN when
+            they have never finished anyone, for the same reason.
+
+    TODO(human): implement both.
+
+    Three things worth getting right, each of which is a real trap:
+      * The window is the last RECENT_N FIGHTS, not the last RECENT_N WINS.
+        Taking the last five wins reaches arbitrarily far back in time and
+        quietly undoes the recency the feature exists to add.
+      * End_Round arrives as a string in the raw table and can be empty. Coerce
+        it, and drop rows where it does not parse rather than treating a failed
+        parse as round 0.
+      * Return NaN, never a sentinel, when the quantity is undefined. Both
+        callers below depend on it: _debut_features returns NaN for these keys,
+        and the missing-flag machinery in features.py turns NaN into an explicit
+        "this was unknown" column rather than a number the tree can split on.
+    """
+    raise NotImplementedError("TODO(human): implement finish_quality_as_of")
 
 
 def features_as_of(index: "HistoryIndex", fighter_url: str, as_of_date,
@@ -433,7 +503,16 @@ def features_as_of(index: "HistoryIndex", fighter_url: str, as_of_date,
 
     support = "thin" if n < THIN_HISTORY_FIGHTS else "ok"
 
+    # Opt-in feature, still a skeleton. Until finish_quality_as_of is written
+    # the keys are present and NaN, which is what the missing-flag path expects
+    # and which keeps every other feature working meanwhile.
+    try:
+        finish_quality = finish_quality_as_of(past)
+    except NotImplementedError:
+        finish_quality = {k: np.nan for k in FINISH_QUALITY_KEYS}
+
     return {
+        **finish_quality,
         "n_fights": n,
         "win_rate": shrink(wins, n, prior["win_rate"], SHRINK_ALPHA),
         "win_rate_raw": win_rate_raw,

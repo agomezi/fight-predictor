@@ -37,7 +37,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from src.evaluate import accuracy, bootstrap_ci  # noqa: E402
 from src.features import FEATURE_NAMES, build_feature_table, to_matrix  # noqa: E402
 from src.forest import RandomForest  # noqa: E402
-from src.history import (  # noqa: E402
+from src.history import (
+    finish_quality_as_of,  # noqa: E402
     EloIndex,
     OpponentQualityIndex,
     AS_OF_FEATURES,
@@ -324,7 +325,61 @@ def test_opponent_quality_boundaries():
           f"({base['sos_n_opponents']:.0f} -> {later['sos_n_opponents']:.0f})")
 
 
+def test_finish_quality_boundary():
+    """finish_quality_as_of must not see a single fight at or after the cutoff.
+
+    The feature is recency-weighted, which makes its boundary MORE fragile than
+    an unweighted one, not less: a window of "the last N fights" that accidentally
+    includes the current bout is dominated by it, because N is small. An
+    unweighted career rate would dilute the same mistake across dozens of fights
+    and might still look plausible.
+
+    So this fabricates a future for the SUBJECT -- a run of first-round finishes
+    dated after the cutoff -- and requires the as-of value not to move. Then it
+    confirms the check is not vacuous by reading from a later cutoff, where that
+    fabricated run must be visible.
+    """
+    counts = log["fighter_url"].value_counts()
+    subj = str(counts.index[0])
+    dates = sorted(log.loc[log["fighter_url"] == subj, "Event_Date"])
+    cut = dates[len(dates) // 2]
+
+    def as_of(frame, when):
+        past = frame[(frame["fighter_url"] == subj)
+                     & (frame["Event_Date"] < when)]
+        return finish_quality_as_of(past)
+
+    base = as_of(log, cut)
+
+    # Twelve fabricated first-round finishing wins, all AFTER the cutoff.
+    future = pd.DataFrame({
+        "fighter_url": [subj] * 12,
+        "Event_Date": [cut + pd.Timedelta(days=30 * (i + 1)) for i in range(12)],
+        "won": [1] * 12,
+        "is_finish": [True] * 12,
+        "End_Round": ["1"] * 12,
+    })
+    poisoned = pd.concat([log, future], ignore_index=True)
+    poisoned = poisoned.sort_values(["fighter_url", "Event_Date"], kind="mergesort")
+    after = as_of(poisoned, cut)
+
+    def same(a, b):
+        return all((np.isnan(a[k]) and np.isnan(b[k])) or np.isclose(a[k], b[k])
+                   for k in a)
+
+    check("a fabricated future does not move the as-of value", same(base, after),
+          f"{base} vs {after}")
+
+    # Not vacuous: from a later cutoff the fabricated run MUST be visible.
+    later_cut = future["Event_Date"].max() + pd.Timedelta(days=1)
+    later = as_of(poisoned, later_cut)
+    moved = not same(base, later)
+    check("the fabricated run IS visible from a later cutoff", moved,
+          f"{base} vs {later}")
+
+
 for name, fn in (("opponent-quality boundaries", test_opponent_quality_boundaries),
+                 ("finish-quality boundary", test_finish_quality_boundary),
                  ("fabricated-future invariance", test_fabricated_future),
                  ("shuffled-label control", test_shuffled_label_control)):
     print()
