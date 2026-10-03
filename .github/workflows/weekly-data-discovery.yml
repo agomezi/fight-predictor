@@ -94,12 +94,18 @@ jobs:
             python scripts/refresh_data.py --write --add-bio-stubs
             python scripts/test_leakage.py
             python scripts/test_matchup.py
-            python scripts/evaluate_models.py
+            python scripts/test_names.py
+            python scripts/evaluate_models.py --seeds 42,7,1234
             ```
 
-            Walk-forward accuracy must stay near **0.6107 +/- 0.0291**. A jump
-            to 0.70 is a bug report, not a win. Then bump
-            `pending/last_ingested.txt`.
+            Walk-forward accuracy must stay near **0.6045 +/- 0.0201**
+            seed-averaged. A jump to 0.70 is a bug report, not a win. Then bump
+            `pending/last_ingested.txt` to the newest ingested event date.
+
+            The band is the SEED-AVERAGED figure, not the 0.6107 this template
+            used to quote: that number was a single lucky seed, as the README
+            says and as `src/evaluate.py` records. Reading a refresh against it
+            would make every ingest look like a regression.
 
             ### All 14 rolling features now refresh
             The source is ESPN, which publishes a per-fight box score, so
