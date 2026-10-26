@@ -1,78 +1,54 @@
 Fight_URL,Fighter_1,Fighter_2,Winner,Weight_Class,Method,End_Round,End_Time,Total_Fight_Time_Sec,Time_Format,F1_KD,F2_KD,F1_Sig_Landed,F1_Sig_Att,F2_Sig_Landed,F2_Sig_Att,F1_TD_Landed,F2_TD_Landed,F1_TD_Att,F2_TD_Att,F1_Sub_Att,F2_Sub_Att,F1_Ctrl_Sec,F2_Ctrl_Sec,F1_Head,F2_Head,F1_Body,F2_Body,F1_Leg,F2_Leg,F1_Distance,F2_Distance,F1_Clinch,F2_Clinch,F1_Ground,F2_Ground,Event_Date
-wiki:2026-08-22:anthony_hernandez-gregory_rodrigues,Gregory Rodrigues,Anthony Hernandez,Gregory Rodrigues,Middleweight Bout,Decision - Unanimous,5,5:00,1500,5 Rnd (5-5-5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-08-22
-wiki:2026-08-22:serghei_spivac-vitor_petrino,Vitor Petrino,Serghei Spivac,Vitor Petrino,Heavyweight Bout,Decision - Unanimous,3,5:00,900,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-08-22
-wiki:2026-08-22:reinier_de_ridder-roman_dolidze,Reinier de Ridder,Roman Dolidze,Reinier de Ridder,Light Heavyweight Bout,KO/TKO,1,4:01,241,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-08-22
-wiki:2026-08-22:marquel_mederos-mason_jones,MarQuel Mederos,Mason Jones,MarQuel Mederos,Lightweight Bout,KO/TKO,2,2:07,427,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-08-22
-wiki:2026-08-22:carli_judice-jeisla_chaves,Carli Judice,Jeisla Chaves,Carli Judice,Women's Flyweight Bout,KO/TKO,1,1:39,99,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-08-22
-wiki:2026-08-22:anthony_wint-terrance_chatman,Anthony Wint,Terrance Chatman,Anthony Wint,Heavyweight Bout,Submission,1,4:29,269,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-08-22
-wiki:2026-08-22:jamall_emmers-lerryan_douglas,Jamall Emmers,Lerryan Douglas,Jamall Emmers,Featherweight Bout,KO/TKO,1,3:38,218,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-08-22
-wiki:2026-08-22:kennedy_nzechukwu-shamil_gaziev,Shamil Gaziev,Kennedy Nzechukwu,Shamil Gaziev,Heavyweight Bout,KO/TKO,1,1:20,80,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-08-22
-wiki:2026-08-22:chris_padilla-nasrat_haqparast,Chris Padilla,Nasrat Haqparast,Chris Padilla,Lightweight Bout,Submission,3,4:59,899,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-08-22
-wiki:2026-08-22:marcio_barbosa-ryan_kuse,Márcio Barbosa,Ryan Kuse,Márcio Barbosa,Featherweight Bout,KO/TKO,1,2:47,167,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-08-22
-wiki:2026-08-22:gauge_young-stanley_dorsainvil,Stanley Dorsainvil,Gauge Young,Stanley Dorsainvil,Lightweight Bout,Decision - Unanimous,3,5:00,900,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-08-22
-wiki:2026-08-22:jackson_mcvey-wesley_schultz,Jackson McVey,Wesley Schultz,Jackson McVey,Middleweight Bout,KO/TKO,1,4:13,253,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-08-22
-wiki:2026-08-22:elise_reed-shanelle_dyer,Shanelle Dyer,Elise Reed,Shanelle Dyer,Women's Strawweight Bout,KO/TKO,3,1:42,702,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-08-22
-wiki:2026-08-29:song_yadong-umar_nurmagomedov,Song Yadong,Umar Nurmagomedov,Song Yadong,Bantamweight Bout,KO/TKO,2,1:48,408,5 Rnd (5-5-5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-08-29
-wiki:2026-08-29:denise_gomes-yan_xiaonan,Denise Gomes,Yan Xiaonan,Denise Gomes,Women's Strawweight Bout,KO/TKO,1,4:49,289,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-08-29
-wiki:2026-08-29:aori_qileng-kai_asakura,Kai Asakura,Aori Qileng,Kai Asakura,Bantamweight Bout,KO/TKO,2,0:34,334,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-08-29
-wiki:2026-08-29:alex_perez-su_mudaerji,Su Mudaerji,Alex Perez,Su Mudaerji,Flyweight Bout,Decision - Unanimous,3,5:00,900,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-08-29
-wiki:2026-08-29:levi_rodrigues_jr-liu_ce,Liu Ce,Levi Rodrigues Jr.,Liu Ce,Light Heavyweight Bout,KO/TKO,1,4:26,266,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-08-29
-wiki:2026-08-29:bilal_hasan-nilson_rojas,Bilal Hasan,Nilson Rojas,Bilal Hasan,Flyweight Bout,KO/TKO,2,2:28,448,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-08-29
-wiki:2026-08-29:andre_lima-namsrai_batbayar,André Lima,Namsrai Batbayar,André Lima,Catchweight (127 lb) Bout,Submission,3,3:03,783,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-08-29
-wiki:2026-08-29:kevin_borjas-rei_tsuruya,Rei Tsuruya,Kevin Borjas,Rei Tsuruya,Flyweight Bout,Submission,1,4:14,254,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-08-29
-wiki:2026-08-29:jack_jenkins-sean_woodson,Sean Woodson,Jack Jenkins,Sean Woodson,Featherweight Bout,Decision - Split,3,5:00,900,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-08-29
-wiki:2026-08-29:francesco_nuzzi-xiao_long,Francesco Nuzzi,Xiao Long,Francesco Nuzzi,Bantamweight Bout,KO/TKO,1,1:00,60,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-08-29
-wiki:2026-08-29:hector_santiago-lawrence_lui,Hector Santiago,Lawrence Lui,Hector Santiago,Bantamweight Bout,KO/TKO,2,0:53,353,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-08-29
-wiki:2026-08-29:julia_polastri-xiong_jingnan,Julia Polastri,Xiong Jingnan,Julia Polastri,Catchweight (118.5 lb) Bout,KO/TKO,1,3:06,186,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-08-29
-wiki:2026-08-29:cameron_nelson-ding_meng,Cameron Nelson,Ding Meng,Cameron Nelson,Welterweight Bout,Decision - Unanimous,3,5:00,900,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-08-29
-wiki:2026-09-05:dan_hooker-salahdine_parnasse,Salahdine Parnasse,Dan Hooker,Salahdine Parnasse,Lightweight Bout,KO/TKO,1,2:35,155,5 Rnd (5-5-5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-05
-wiki:2026-09-05:axel_sola-fares_ziam,Axel Sola,Farès Ziam,Axel Sola,Lightweight Bout,KO/TKO,1,1:40,100,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-05
-wiki:2026-09-05:michael_page-nursulton_ruziboev,Michael Page,Nursulton Ruziboev,Michael Page,Middleweight Bout,Decision - Unanimous,3,5:00,900,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-05
-wiki:2026-09-05:daniil_donchenko-punahele_soriano,Daniil Donchenko,Punahele Soriano,Daniil Donchenko,Welterweight Bout,Decision - Unanimous,3,5:00,900,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-05
-wiki:2026-09-05:kurtis_campbell-trevor_peek,Kurtis Campbell,Trevor Peek,Kurtis Campbell,Featherweight Bout,Submission,3,3:07,787,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-05
-wiki:2026-09-05:losene_keita-muhammad_naimov,Losene Keita,Muhammad Naimov,Losene Keita,Featherweight Bout,KO/TKO,1,2:54,174,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-05
-wiki:2026-09-05:felipe_lima-morgan_charriere,Felipe Lima,Morgan Charrière,Felipe Lima,Featherweight Bout,Decision - Unanimous,3,5:00,900,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-05
-wiki:2026-09-05:mario_pinto-ryan_spann,Mário Pinto,Ryan Spann,Mário Pinto,Heavyweight Bout,KO/TKO,2,0:55,355,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-05
-wiki:2026-09-05:modestas_bukauskas-oumar_sy,Modestas Bukauskas,Oumar Sy,Modestas Bukauskas,Light Heavyweight Bout,KO/TKO,2,3:57,537,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-05
-wiki:2026-09-05:nathaniel_wood-pavel_andrusca,Pavel Andrusca,Nathaniel Wood,Pavel Andrusca,Featherweight Bout,Decision - Unanimous,3,5:00,900,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-05
-wiki:2026-09-05:fabia_sintes-michael_aljarouj,Fabià Sintes,Michael Aljarouj,Fabià Sintes,Flyweight Bout,Decision - Unanimous,3,5:00,900,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-05
-wiki:2026-09-05:klaudia_sygua-nora_cornolle,Nora Cornolle,Klaudia Syguła,Nora Cornolle,Women's Bantamweight Bout,Decision - Unanimous,3,5:00,900,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-05
-wiki:2026-09-05:luis_felipe_dias-matthieu_letho_duclos,Matthieu Letho Duclos,Luis Felipe Dias,Matthieu Letho Duclos,Middleweight Bout,KO/TKO,1,4:35,275,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-05
-wiki:2026-09-05:delphine_benouaich-sofia_montenegro,Delphine Benouaich,Sofia Montenegro,Delphine Benouaich,Women's Strawweight Bout,Submission,2,4:22,562,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-05
-wiki:2026-09-12:jean_silva-jose_miguel_delgado,Jean Silva,Jose Miguel Delgado,Jean Silva,Featherweight Bout,Submission,3,2:57,777,5 Rnd (5-5-5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-12
-wiki:2026-09-12:brandon_moreno-joseph_morales,Brandon Moreno,Joseph Morales,Brandon Moreno,Flyweight Bout,Decision - Split,3,5:00,900,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-12
-wiki:2026-09-12:marwan_rahiki-tommy_mcmillen,Tommy McMillen,Marwan Rahiki,Tommy McMillen,Featherweight Bout,Decision - Unanimous,3,5:00,900,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-12
-wiki:2026-09-12:alexa_grasso-manon_fiorot,Alexa Grasso,Manon Fiorot,Alexa Grasso,Women's Flyweight Bout,Decision - Unanimous,3,5:00,900,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-12
-wiki:2026-09-12:curtis_blaydes-waldo_cortesacosta,Curtis Blaydes,Waldo Cortes-Acosta,Curtis Blaydes,Heavyweight Bout,Decision - Unanimous,3,5:00,900,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-12
-wiki:2026-09-12:dan_ige-david_martinez,David Martínez,Dan Ige,David Martínez,Bantamweight Bout,Decision - Unanimous,3,5:00,900,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-12
-wiki:2026-09-12:edgar_chairez-tim_elliott,Tim Elliott,Édgar Cháirez,Tim Elliott,Catchweight (130 lb) Bout,Decision - Unanimous,3,5:00,900,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-12
-wiki:2026-09-12:ignacio_bahamondes-muslim_salikhov,Ignacio Bahamondes,Muslim Salikhov,Ignacio Bahamondes,Welterweight Bout,Decision - Unanimous,3,5:00,900,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-12
-wiki:2026-09-12:djorden_santos-yousri_belgaroui,Yousri Belgaroui,Djorden Santos,Yousri Belgaroui,Middleweight Bout,KO/TKO,1,4:25,265,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-12
-wiki:2026-09-12:drakkar_klose-thomas_gantt,Thomas Gantt,Drakkar Klose,Thomas Gantt,Lightweight Bout,Submission,3,2:46,766,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-12
-wiki:2026-09-12:rafa_garcia-rong_zhu,Rong Zhu,Rafa García,Rong Zhu,Lightweight Bout,Decision - Unanimous,3,5:00,900,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-12
-wiki:2026-09-12:jessie_rosas-sean_king_iii,Sean King III,Jessie Rosas,Sean King III,Featherweight Bout,KO/TKO,1,0:36,36,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-12
-wiki:2026-09-12:jj_aldrich-regina_tarin,Regina Tarín,JJ Aldrich,Regina Tarín,Women's Flyweight Bout,Decision - Unanimous,3,5:00,900,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-12
-wiki:2026-09-19:alexandre_pantoja-joshua_van,Joshua Van,Alexandre Pantoja,Joshua Van,UFC Flyweight Title Bout,Decision - Unanimous,5,5:00,1500,5 Rnd (5-5-5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-19
-wiki:2026-09-19:arman_tsarukyan-mauricio_ruffy,Arman Tsarukyan,Maurício Ruffy,Arman Tsarukyan,Lightweight Bout,KO/TKO,1,4:56,296,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-19
-wiki:2026-09-19:choi_dooho-patricio_pitbull,Patrício Pitbull,Choi Doo-ho,Patrício Pitbull,Featherweight Bout,KO/TKO,1,3:28,208,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-19
-wiki:2026-09-19:gable_steveson-sean_sharaf,Sean Sharaf,Gable Steveson,Sean Sharaf,Heavyweight Bout,KO/TKO,1,0:12,12,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-19
-wiki:2026-09-19:alonzo_menifield-iwo_baraniewski,Alonzo Menifield,Iwo Baraniewski,Alonzo Menifield,Light Heavyweight Bout,Decision - Split,3,5:00,900,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-19
-wiki:2026-09-19:charles_jourdain-marlon_vera,Marlon Vera,Charles Jourdain,Marlon Vera,Bantamweight Bout,Submission,3,2:02,722,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-19
-wiki:2026-09-19:robelis_despaigne-tai_tuivasa,Robelis Despaigne,Tai Tuivasa,Robelis Despaigne,Heavyweight Bout,Decision - Split,3,5:00,900,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-19
-wiki:2026-09-19:michael_aswell_jr-yoo_joosang,Michael Aswell Jr.,Yoo Joo-sang,Michael Aswell Jr.,Featherweight Bout,Decision - Split,3,5:00,900,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-19
-wiki:2026-09-19:osman_diaz-ryan_gandra,Ryan Gandra,Osman Diaz,Ryan Gandra,Middleweight Bout,KO/TKO,1,2:04,124,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-19
-wiki:2026-09-19:brunno_ferreira-edmen_shahbazyan,Edmen Shahbazyan,Brunno Ferreira,Edmen Shahbazyan,Middleweight Bout,Decision - Unanimous,3,5:00,900,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-19
-wiki:2026-09-19:casey_oneill-eduarda_moura,Casey O'Neill,Eduarda Moura,Casey O'Neill,Women's Flyweight Bout,Submission,1,3:22,202,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-19
-wiki:2026-09-19:giga_chikadze-joanderson_brito,Joanderson Brito,Giga Chikadze,Joanderson Brito,Featherweight Bout,KO/TKO,1,1:57,117,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-19
-wiki:2026-09-26:raoni_barcelos-raul_rosas_jr,Raul Rosas Jr.,Raoni Barcelos,Raul Rosas Jr.,Bantamweight Bout,KO/TKO,5,1:38,1298,5 Rnd (5-5-5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-26
-wiki:2026-09-26:ailin_perez-norma_dumont,Ailín Pérez,Norma Dumont,Ailín Pérez,Women's Bantamweight Bout,Decision - Unanimous,3,5:00,900,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-26
-wiki:2026-09-26:luis_hernandez-sedriques_dumas,Luis Hernandez,Sedriques Dumas,Luis Hernandez,Light Heavyweight Bout,Submission,1,0:57,57,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-26
-wiki:2026-09-26:ilimbek_akylbek_uulu-mehemmedeli_osmanli,Ilimbek Akylbek uulu,Mehemmedeli Osmanli,Ilimbek Akylbek uulu,Bantamweight Bout,DQ,1,2:19,139,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-26
-wiki:2026-09-26:melissa_amaya-valesca_machado,Valesca Machado,Melissa Amaya,Valesca Machado,Women's Strawweight Bout,KO/TKO,2,3:19,499,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-26
-wiki:2026-09-26:brady_hiestand-rinya_nakamura,Brady Hiestand,Rinya Nakamura,Brady Hiestand,Bantamweight Bout,Submission,2,4:07,547,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-26
-wiki:2026-09-26:robert_bryczek-rodolfo_vieira,Rodolfo Vieira,Robert Bryczek,Rodolfo Vieira,Middleweight Bout,Decision - Unanimous,3,5:00,900,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-26
-wiki:2026-09-26:christian_edwards-rodolfo_bellato,Christian Edwards,Rodolfo Bellato,Christian Edwards,Light Heavyweight Bout,KO/TKO,3,1:47,707,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-26
-wiki:2026-09-26:elves_brener-josiah_harrell,Elves Brener,Josiah Harrell,Elves Brener,Lightweight Bout,KO/TKO,1,4:14,254,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-26
-wiki:2026-09-26:montel_jackson-ricky_simon,Montel Jackson,Ricky Simón,Montel Jackson,Bantamweight Bout,KO/TKO,2,2:39,459,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-26
-wiki:2026-09-26:alateng_heili-john_castaneda,Alateng Heili,John Castañeda,Alateng Heili,Bantamweight Bout,Decision - Split,3,5:00,900,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-26
-wiki:2026-09-26:vanessa_demopoulos-yazmin_jauregui,Yazmin Jauregui,Vanessa Demopoulos,Yazmin Jauregui,Women's Strawweight Bout,KO/TKO,1,1:02,62,3 Rnd (5-5-5),,,,,,,,,,,,,,,,,,,,,,,,,,,2026-09-26
+espn:2026-10-03:natalia_silva-wang_cong,Natalia Silva,Wang Cong,Natalia Silva,UFC Women's Flyweight Title Bout,Decision - Unanimous,5,5:00,1500,5 Rnd (5-5-5-5-5),1,0,109,216,98,206,3,0,5,0,0,0,252,159,64,45,28,19,17,34,,,,,,,2026-10-03
+espn:2026-10-03:deiveson_figueiredo-payton_talbott,Deiveson Figueiredo,Payton Talbott,Payton Talbott,Bantamweight Bout,KO/TKO,1,2:09,129,3 Rnd (5-5-5),0,2,5,6,25,44,0,0,2,0,0,0,22,12,3,18,1,5,1,2,,,,,,,2026-10-03
+espn:2026-10-03:esteban_ribovics-king_green,King Green,Esteban Ribovics,Esteban Ribovics,Lightweight Bout,KO/TKO,1,4:08,248,3 Rnd (5-5-5),0,3,27,49,35,71,0,0,1,0,0,0,4,31,11,25,11,4,5,6,,,,,,,2026-10-03
+espn:2026-10-03:khaos_williams-roberto_soldic,Roberto Soldić,Khaos Williams,Roberto Soldić,Welterweight Bout,Decision - Unanimous,3,5:00,900,3 Rnd (5-5-5),0,0,94,162,27,106,3,0,3,0,0,0,272,3,68,12,20,6,6,9,,,,,,,2026-10-03
+espn:2026-10-03:ateba_gautier-roman_kopylov,Ateba Gautier,Roman Kopylov,Roman Kopylov,Middleweight Bout,KO/TKO,1,3:12,192,3 Rnd (5-5-5),0,1,7,30,19,23,0,0,0,0,0,0,0,5,3,16,4,1,0,2,,,,,,,2026-10-03
+espn:2026-10-03:alden_coria-imanol_rodriguez,Imanol Rodriguez,Alden Coria,Imanol Rodriguez,Flyweight Bout,KO/TKO,1,3:11,191,3 Rnd (5-5-5),1,0,20,46,4,17,1,0,1,0,0,0,6,0,12,3,8,0,0,1,,,,,,,2026-10-03
+espn:2026-10-03:andrey_pulyaev-damian_pinas,Damian Pinas,Andrey Pulyaev,Damian Pinas,Middleweight Bout,KO/TKO,1,1:15,75,3 Rnd (5-5-5),1,0,5,7,4,11,0,0,0,0,0,0,3,0,3,1,0,2,2,1,,,,,,,2026-10-03
+espn:2026-10-03:anthony_romero-marcus_mcghee,Marcus McGhee,Anthony Romero,Marcus McGhee,Featherweight Bout,KO/TKO,1,4:58,298,3 Rnd (5-5-5),2,0,34,75,13,37,0,1,0,1,0,0,61,4,24,8,6,3,4,2,,,,,,,2026-10-03
+espn:2026-10-03:anthony_wint-lucas_armand,Anthony Wint,Lucas Armand,Anthony Wint,Heavyweight Bout,KO/TKO,1,0:23,23,3 Rnd (5-5-5),1,0,12,18,1,5,0,0,1,0,0,0,5,0,9,1,3,0,0,0,,,,,,,2026-10-03
+espn:2026-10-03:johnny_walker-mick_parkin,Johnny Walker,Mick Parkin,Johnny Walker,Heavyweight Bout,KO/TKO,1,3:35,215,3 Rnd (5-5-5),1,0,23,32,11,16,0,0,0,0,0,0,27,31,6,2,4,0,13,9,,,,,,,2026-10-03
+espn:2026-10-03:bruce_whitehead-jacobe_smith,Jacobe Smith,Bruce Whitehead,Jacobe Smith,Welterweight Bout,KO/TKO,1,1:32,92,3 Rnd (5-5-5),0,0,11,17,4,13,1,0,2,0,0,0,29,3,6,3,5,1,0,0,,,,,,,2026-10-03
+espn:2026-10-03:alexander_hernandez-rafael_dos_anjos,Rafael Dos Anjos,Alexander Hernandez,Alexander Hernandez,Lightweight Bout,KO/TKO,2,3:12,492,3 Rnd (5-5-5),0,2,26,59,36,86,0,0,0,0,0,0,0,164,20,27,6,7,0,2,,,,,,,2026-10-03
+espn:2026-10-03:ismail_naurdiev-marvin_vettori,Marvin Vettori,Ismail Naurdiev,Ismail Naurdiev,Middleweight Bout,Decision - Unanimous,3,5:00,900,3 Rnd (5-5-5),0,0,76,201,74,190,0,3,2,7,0,1,13,70,62,37,7,9,7,28,,,,,,,2026-10-03
+espn:2026-10-03:court_mcgee-eric_nolan,Court McGee,Eric Nolan,Eric Nolan,Welterweight Bout,KO/TKO,3,3:26,806,3 Rnd (5-5-5),0,1,98,273,121,246,0,0,7,0,0,0,102,21,64,105,18,15,16,1,,,,,,,2026-10-03
+espn:2026-10-10:brendan_allen-christian_leroy_duncan,Brendan Allen,Christian Leroy Duncan,Brendan Allen,Middleweight Bout,Submission,5,2:46,1366,5 Rnd (5-5-5-5-5),0,0,51,107,106,189,4,0,11,0,2,0,519,231,34,65,12,20,5,21,,,,,,,2026-10-10
+espn:2026-10-10:jai_herbert-matheus_camilo,Matheus Camilo,Jai Herbert,Jai Herbert,Lightweight Bout,Decision - Unanimous,3,5:00,900,3 Rnd (5-5-5),0,0,43,86,54,157,2,0,4,1,0,0,161,175,26,25,6,19,11,10,,,,,,,2026-10-10
+espn:2026-10-10:ketlen_souza-loopy_godinez,Loopy Godínez,Ketlen Souza,Loopy Godínez,Women's Strawweight Bout,Decision - Unanimous,3,5:00,900,3 Rnd (5-5-5),0,0,67,146,63,153,2,0,13,0,0,0,219,29,54,45,10,10,3,8,,,,,,,2026-10-10
+espn:2026-10-10:andre_fili-kai_kamaka_iii,Andre Fili,Kai Kamaka III,Andre Fili,Featherweight Bout,KO/TKO,2,0:22,322,3 Rnd (5-5-5),1,0,50,108,33,74,0,0,0,0,0,0,2,8,42,19,4,9,4,5,,,,,,,2026-10-10
+espn:2026-10-10:malcolm_wellmaker-otari_tanzilovi,Malcolm Wellmaker,Otari Tanzilovi,Otari Tanzilovi,Bantamweight Bout,KO/TKO,2,2:39,459,3 Rnd (5-5-5),1,1,17,58,38,67,0,2,0,4,0,0,33,51,4,26,13,6,0,6,,,,,,,2026-10-10
+espn:2026-10-10:gerald_meerschaert-julius_walker,Julius Walker,Gerald Meerschaert,Julius Walker,Light Heavyweight Bout,KO/TKO,2,3:35,515,3 Rnd (5-5-5),0,0,38,50,9,14,3,0,3,1,1,0,405,3,37,5,1,3,0,1,,,,,,,2026-10-10
+espn:2026-10-10:francisco_prado-ismael_bonfim,Francisco Prado,Ismael Bonfim,Francisco Prado,Lightweight Bout,KO/TKO,1,4:23,263,3 Rnd (5-5-5),0,0,25,51,13,26,2,0,2,0,0,0,136,0,19,7,1,1,5,5,,,,,,,2026-10-10
+espn:2026-10-10:leon_shahbazyan-niko_price,Niko Price,Leon Shahbazyan,Niko Price,Welterweight Bout,KO/TKO,1,1:58,118,3 Rnd (5-5-5),0,0,41,59,0,1,0,0,0,2,0,0,105,0,39,0,2,0,0,0,,,,,,,2026-10-10
+espn:2026-10-10:brendson_ribeiro-felipe_franco,Felipe Franco,Brendson Ribeiro,Brendson Ribeiro,Light Heavyweight Bout,Submission,1,1:49,109,3 Rnd (5-5-5),0,0,1,5,6,11,1,0,2,0,0,1,3,12,1,3,0,1,0,2,,,,,,,2026-10-10
+espn:2026-10-10:allen_frye_jr-rj_harris,Allen Frye Jr.,RJ Harris,Allen Frye Jr.,Heavyweight Bout,KO/TKO,1,2:59,179,3 Rnd (5-5-5),1,0,40,55,20,56,0,0,0,0,0,0,5,1,27,9,1,2,12,9,,,,,,,2026-10-10
+espn:2026-10-10:alice_pereira-daria_zhelezniakova,Alice Pereira,Daria Zhelezniakova,Alice Pereira,Women's Bantamweight Bout,KO/TKO,1,5:00,300,3 Rnd (5-5-5),0,0,20,32,6,10,1,0,1,0,0,0,245,0,18,6,2,0,0,0,,,,,,,2026-10-10
+espn:2026-10-10:ernesta_kareckaite-melissa_gatto,Ernesta Kareckaite,Melissa Gatto,,Women's Flyweight Bout,Draw,3,5:00,900,3 Rnd (5-5-5),0,0,48,121,41,79,0,1,1,11,0,2,250,355,34,16,11,20,3,5,,,,,,,2026-10-10
+espn:2026-10-17:joaquin_buckley-mike_malott,Joaquin Buckley,Mike Malott,Mike Malott,Welterweight Bout,KO/TKO,2,2:32,452,5 Rnd (5-5-5-5-5),0,1,14,53,37,50,0,0,0,0,0,0,8,85,6,15,4,20,4,2,,,,,,,2026-10-17
+espn:2026-10-17:erin_blanchfield-jasmine_jasudavicius,Erin Blanchfield,Jasmine Jasudavicius,Jasmine Jasudavicius,Women's Flyweight Bout,Decision - Unanimous,3,5:00,900,3 Rnd (5-5-5),0,0,62,134,43,138,1,5,2,13,0,3,14,479,57,36,4,5,1,2,,,,,,,2026-10-17
+espn:2026-10-17:cristian_perez-kyle_nelson,Kyle Nelson,Cristian Pérez,Cristian Pérez,Lightweight Bout,KO/TKO,1,0:27,27,3 Rnd (5-5-5),0,1,5,7,10,21,0,0,0,0,0,0,0,4,4,8,1,1,0,1,,,,,,,2026-10-17
+espn:2026-10-17:kyle_daukaus-marcandre_barriault,Marc-Andre Barriault,Kyle Daukaus,Marc-Andre Barriault,Middleweight Bout,KO/TKO,1,4:28,268,3 Rnd (5-5-5),1,0,32,46,5,11,0,1,0,3,0,0,28,195,31,4,0,0,1,1,,,,,,,2026-10-17
+espn:2026-10-17:louis_jourdain-timmy_cuamba,Louis Jourdain,Timmy Cuamba,Timmy Cuamba,Bantamweight Bout,Submission,2,2:48,468,3 Rnd (5-5-5),0,0,9,36,22,50,0,4,1,4,1,1,0,287,2,15,3,7,4,0,,,,,,,2026-10-17
+espn:2026-10-17:mandel_nallo-nate_landwehr,Mandel Nallo,Nate Landwehr,Mandel Nallo,Lightweight Bout,KO/TKO,2,0:47,347,3 Rnd (5-5-5),1,0,58,100,13,47,1,0,1,0,1,0,32,0,40,9,7,1,11,3,,,,,,,2026-10-17
+espn:2026-10-17:jhonata_diniz-tanner_boser,Tanner Boser,Jhonata Diniz,Tanner Boser,Heavyweight Bout,KO/TKO,3,4:26,866,3 Rnd (5-5-5),0,0,44,71,14,45,3,0,3,0,1,0,618,0,33,8,8,3,3,3,,,,,,,2026-10-17
+espn:2026-10-17:julien_leblanc-nick_galanti,Julien LeBlanc,Nick Galanti,Nick Galanti,Middleweight Bout,Submission,1,1:26,86,3 Rnd (5-5-5),0,0,0,1,1,2,0,2,0,2,0,1,0,75,0,0,0,1,0,0,,,,,,,2026-10-17
+espn:2026-10-17:javad_mahjoub-joel_faglier,Javad Mahjoub,Joel Faglier,Joel Faglier,Heavyweight Bout,KO/TKO,2,2:11,431,3 Rnd (5-5-5),2,0,60,114,51,76,1,1,3,1,0,0,96,2,54,19,5,26,1,6,,,,,,,2026-10-17
+espn:2026-10-17:katlyn_cerminara-mackenzie_stiller,Katlyn Cerminara,Mackenzie Stiller,Katlyn Cerminara,Women's Flyweight Bout,KO/TKO,1,4:46,286,3 Rnd (5-5-5),1,0,32,71,19,58,0,0,0,1,0,0,15,0,29,9,2,7,1,3,,,,,,,2026-10-17
+espn:2026-10-17:chad_anheliger-steven_koslow,Chad Anheliger,Steven Koslow,Steven Koslow,Bantamweight Bout,Submission,3,4:31,871,3 Rnd (5-5-5),0,0,34,59,51,88,0,4,0,4,0,2,12,417,25,34,4,8,5,9,,,,,,,2026-10-17
+espn:2026-10-17:chelsea_chandler-melissa_croden,Melissa Croden,Chelsea Chandler,Chelsea Chandler,Women's Bantamweight Bout,Submission,1,4:52,292,3 Rnd (5-5-5),0,0,11,29,12,27,1,0,3,1,0,1,134,76,5,4,6,8,0,0,,,,,,,2026-10-17
+espn:2026-10-17:cody_chovancek-suyoung_you,Cody Chovancek,SuYoung You,SuYoung You,Bantamweight Bout,Submission,3,4:19,859,3 Rnd (5-5-5),0,0,1,7,5,7,0,6,0,8,0,1,12,720,1,4,0,0,0,1,,,,,,,2026-10-17
+espn:2026-10-24:alexander_volkanovski-movsar_evloev,Alexander Volkanovski,Movsar Evloev,Alexander Volkanovski,UFC Featherweight Title Bout,KO/TKO,2,4:54,594,5 Rnd (5-5-5-5-5),0,0,56,110,40,65,1,3,2,7,0,0,104,46,48,28,3,8,5,4,,,,,,,2026-10-24
+espn:2026-10-24:merab_dvalishvili-petr_yan,Petr Yan,Merab Dvalishvili,Petr Yan,UFC Bantamweight Title Bout,Decision - Unanimous,5,5:00,1500,5 Rnd (5-5-5-5-5),0,0,128,228,131,363,0,5,1,58,0,0,23,114,95,100,18,8,15,23,,,,,,,2026-10-24
+espn:2026-10-24:loneer_kavanagh-ramazan_temirov,Lone'er Kavanagh,Ramazan Temirov,Lone'er Kavanagh,Flyweight Bout,KO/TKO,1,4:28,268,3 Rnd (5-5-5),1,0,23,44,18,40,0,0,0,0,0,0,1,0,15,15,3,1,5,2,,,,,,,2026-10-24
+espn:2026-10-24:alexander_volkov-rizvan_kuniev,Alexander Volkov,Rizvan Kuniev,Alexander Volkov,Heavyweight Bout,Decision - Unanimous,3,5:00,900,3 Rnd (5-5-5),0,0,74,150,51,87,0,0,0,4,1,0,122,4,35,35,25,7,14,9,,,,,,,2026-10-24
+espn:2026-10-24:aaron_pico-losene_keita,Aaron Pico,Losene Keita,Aaron Pico,Featherweight Bout,KO/TKO,1,1:14,74,3 Rnd (5-5-5),1,0,6,10,2,4,1,0,2,0,0,0,37,0,6,1,0,1,0,0,,,,,,,2026-10-24
+espn:2026-10-24:azamat_murzakanov-dominick_reyes,Azamat Murzakanov,Dominick Reyes,Dominick Reyes,Light Heavyweight Bout,KO/TKO,1,2:40,160,3 Rnd (5-5-5),0,1,3,7,14,24,0,0,1,0,0,0,0,4,2,7,0,1,1,6,,,,,,,2026-10-24
+espn:2026-10-24:abdulrakhman_yakhyaev-nikita_krylov,Nikita Krylov,Abdul-Rakhman Yakhyaev,Abdul-Rakhman Yakhyaev,Light Heavyweight Bout,KO/TKO,1,2:38,158,3 Rnd (5-5-5),0,1,4,6,6,9,0,1,1,1,0,1,89,44,2,3,0,3,2,0,,,,,,,2026-10-24
+espn:2026-10-24:abus_magomedov-cam_rowston,Abus Magomedov,Cam Rowston,Abus Magomedov,Middleweight Bout,Submission,1,1:44,104,3 Rnd (5-5-5),0,0,11,15,1,11,0,1,0,1,1,0,7,6,5,0,1,0,5,1,,,,,,,2026-10-24
+espn:2026-10-24:grant_dawson-nurullo_aliev,Grant Dawson,Nurullo Aliev,Grant Dawson,Lightweight Bout,Decision - Unanimous,3,5:00,900,3 Rnd (5-5-5),0,0,95,188,65,106,5,1,7,2,1,0,378,86,71,50,16,12,8,3,,,,,,,2026-10-24
+espn:2026-10-24:asaf_chopurov-colby_thicknesse,Colby Thicknesse,Asaf Chopurov,Colby Thicknesse,Bantamweight Bout,Decision - Split,3,5:00,900,3 Rnd (5-5-5),0,0,71,134,34,91,1,8,15,12,0,0,194,301,37,22,30,11,4,1,,,,,,,2026-10-24
+espn:2026-10-24:abubakar_vagaev-jacob_malkoun,Abubakar Vagaev,Jacob Malkoun,Abubakar Vagaev,Middleweight Bout,Decision - Unanimous,3,5:00,900,3 Rnd (5-5-5),0,0,71,139,106,202,6,0,12,4,0,0,127,12,55,95,5,11,11,0,,,,,,,2026-10-24
+espn:2026-10-24:bolaji_oki-daniel_santos,Bolaji Oki,Daniel Santos,Daniel Santos,Featherweight Bout,Decision - Unanimous,3,5:00,900,3 Rnd (5-5-5),0,0,69,107,76,159,2,2,3,5,0,1,163,100,45,35,21,19,3,22,,,,,,,2026-10-24
+espn:2026-10-24:kody_steele-noah_gugnon,Kody Steele,Noah Gugnon,Kody Steele,Lightweight Bout,KO/TKO,1,3:54,234,3 Rnd (5-5-5),1,0,25,52,31,57,1,0,3,0,0,0,22,0,20,26,3,0,2,5,,,,,,,2026-10-24
+espn:2026-10-24:iasmin_lucindo-nicolle_caliari,Iasmin Lucindo,Nicolle Caliari,Iasmin Lucindo,Women's Strawweight Bout,Decision - Unanimous,3,5:00,900,3 Rnd (5-5-5),0,0,31,49,27,36,3,2,4,4,0,0,567,135,22,13,7,12,2,2,,,,,,,2026-10-24
