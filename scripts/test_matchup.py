@@ -185,29 +185,41 @@ if jones and islam:
           hw["cut_burden_diff"] < -50,
           "(Makhachev is ~95 lb under a 265 lb limit)")
 
-    # Model-level: a forest that can see the weight columns must prefer
-    # Makhachev more at welterweight than at heavyweight. Small and fast --
-    # this asserts the DIRECTION of the response, not a particular probability.
+    # Model-level: a forest that can see the weight columns must respond to
+    # the division. Asserted on the MEAN shift over several seeds: a single
+    # 60-tree forest moved this 0.007 after the 2026-11 refresh and 0.01+
+    # before it, so one seed was measuring forest noise, not the feature.
     from src.forest import RandomForest
     from src.matchup import build_training_matrix, feature_columns
     cols = feature_columns(with_weight=True)
     Xw, yw, cols = build_training_matrix(features, bios, columns=cols)
-    fw = RandomForest(n_trees=60, max_depth=8, min_samples_split=20,
-                      min_samples_leaf=10, feature_subset="sqrt",
-                      oob_score=False, random_state=42).fit(Xw, yw)
+    fw_rows = {d: (rows_to_matrix([build_matchup_row(jones, islam, d, when, bios)], cols),
+                   rows_to_matrix([build_matchup_row(islam, jones, d, when, bios)], cols))
+               for d in ("Welterweight Bout", "Heavyweight Bout")}
 
-    def p_jones(div):
-        f_ = build_matchup_row(jones, islam, div, when, bios)
-        r_ = build_matchup_row(islam, jones, div, when, bios)
-        pf = float(fw.predict_proba(rows_to_matrix([f_], cols))[0])
-        pr = float(fw.predict_proba(rows_to_matrix([r_], cols))[0])
+    def p_jones(model, div):
+        fwd_, rev_ = fw_rows[div]
+        pf = float(model.predict_proba(fwd_)[0])
+        pr = float(model.predict_proba(rev_)[0])
         return (pf + (1.0 - pr)) / 2.0
 
-    p_ww, p_hw = p_jones("Welterweight Bout"), p_jones("Heavyweight Bout")
+    SEEDS = (42, 43, 44, 45, 46)
+    shifts = []
+    for seed in SEEDS:
+        fw = RandomForest(n_trees=60, max_depth=8, min_samples_split=20,
+                          min_samples_leaf=10, feature_subset="sqrt",
+                          oob_score=False, random_state=seed).fit(Xw, yw)
+        p_ww = p_jones(fw, "Welterweight Bout")
+        p_hw = p_jones(fw, "Heavyweight Bout")
+        shifts.append(abs(p_ww - p_hw))
+        print(f"       seed {seed}: P(Jones) {p_ww:.3f} at WW vs {p_hw:.3f} "
+              f"at HW, moved {abs(p_ww - p_hw):.3f}")
+    mean_shift = float(np.mean(shifts))
     check("the division actually changes the prediction",
-          abs(p_ww - p_hw) > 0.01,
-          f"(P(Jones) {p_ww:.3f} at WW vs {p_hw:.3f} at HW, moved "
-          f"{abs(p_ww - p_hw):.3f}; before these features it could not move)")
+          mean_shift > 0.01,
+          f"(mean shift {mean_shift:.3f} over {len(SEEDS)} seeds, "
+          f"sd {np.std(shifts, ddof=1):.3f}; before these features it could "
+          f"not move)")
 
     # NOT asserted: the DIRECTION of that move.
     #
