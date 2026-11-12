@@ -209,10 +209,10 @@ def build_rows(events, columns, canon=None, verbose=True):
                 continue
 
             winners = [n for n, c in zip(names, corners) if c.get("winner")]
-            # A draw or no-contest has no single winner. Written blank and
-            # reported rather than guessed; validate() rejects the row, which is
-            # the honest outcome for a bout with no winner to predict.
-            winner = winners[0] if len(winners) == 1 else ""
+            # A draw or no-contest has no single winner. The dataset's own
+            # convention for that is "Draw/NC" (the labelling step drops it
+            # from training), so write that rather than guessing a winner.
+            winner = winners[0] if len(winners) == 1 else "Draw/NC"
 
             end_round = status.get("period") or ""
             end_time = status.get("displayClock") or ""
@@ -315,7 +315,7 @@ def validate(existing: pd.DataFrame, new_rows, known_names) -> list:
                             f"{prev_max.date()}")
             break
     for r in new_rows:
-        if r["Winner"] not in (r["Fighter_1"], r["Fighter_2"]):
+        if r["Winner"] not in (r["Fighter_1"], r["Fighter_2"], "Draw/NC"):
             problems.append(f"Winner not one of the two fighters: {r['Winner']}")
             break
     for r in new_rows:
