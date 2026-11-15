@@ -45,3 +45,32 @@ measurement of nothing.
 
 Gate result: all six suites pass; walk-forward accuracy stayed inside the
 required band. See the PR for the measured numbers.
+
+### 2026-10-08 — ESPN catch-up, 2026-08-15 -> 2026-10-03
+Ingested by `scripts/refresh_data.py` (ESPN source) in two passes: an earlier
+run had already produced 2026-08-22 -> 2026-09-26 in `_refreshed.csv` but was
+never promoted; this pass added UFC 332 (2026-10-03, 14 bouts) and promoted
+both. Fights 8,809 -> 8,900 raw; 8,749 labelled. One bio stub added (Bruce
+Whitehead), biometrics blank. Fighters 4,523 -> 4,550.
+
+Gate: all 8 test suites pass; walk-forward `+ rolling form` 0.6096 (sd 0.0239),
+inside the 0.6082 +/- 0.0202 band. Previous files kept in
+`backup-2026-08-15-final/` and `backup-2026-09-26/`.
+
+Known hazard: `refresh_data.py --write` with `--out` equal to the input CSV
+truncates the input before reading it (the output is opened first). Always
+pass a distinct `--out`.
+
+### 2026-11-12 — ESPN catch-up, 2026-10-10 -> 2026-11-07
+Ingested by `scripts/refresh_data.py` (ESPN source), five cards: 10-10 (12),
+10-17 (13), 10-24 (14, UFC 333), 10-31 (12), 11-07 (14). Fights 8,900 ->
+8,965 raw; 8,749 -> 8,813 labelled (the 10-10 Kareckaite vs Gatto draw is
+written `Draw/NC` and dropped by the label cleaner). 11 bio stubs added,
+biometrics blank. Fighters 4,550 -> 4,561. 20 of 26 per-fight stat columns
+carry values.
+
+Gate: all 8 test suites pass; walk-forward `+ rolling form` 0.6011 (sd 0.0253),
+inside the 0.6082 +/- 0.0202 band. It sits 0.0085 below the 2026-10-08 run,
+which is a third of the fold sd. Previous files kept in `backup-2026-10-08/`.
+Fight-week scoring of the five cards (`scripts/score_cards.py`): 0.562
+(binomial sd 0.062) over 64 bouts.
