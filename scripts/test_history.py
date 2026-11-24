@@ -31,6 +31,9 @@ from src.data_loading import load_fights  # noqa: E402
 from src.features import build_feature_table  # noqa: E402
 from src.history import (
     FINISH_QUALITY_KEYS,  # noqa: E402
+    LAYOFF_KEYS,
+    LONG_LAYOFF_DAYS,
+    layoff_as_of,
     AS_OF_FEATURES,
     SECS_PER_15M,
     EloIndex,
@@ -153,7 +156,8 @@ try:
     # FINISH_QUALITY_KEYS are emitted by features_as_of but deliberately kept
     # OUT of AS_OF_FEATURES, so they do not reach the default column set. The
     # contract is still exact -- it just has two parts now.
-    expected = set(AS_OF_FEATURES) | set(FINISH_QUALITY_KEYS) | {"support"}
+    expected = (set(AS_OF_FEATURES) | set(FINISH_QUALITY_KEYS)
+                | set(LAYOFF_KEYS) | {"support"})
     check("returns exactly the AS_OF_FEATURES keys plus support",
           set(d) == expected,
           f"(unexpected: {sorted(set(d) - expected)}; "
@@ -401,6 +405,29 @@ try:
           shrink(0, 3, 0.5, alpha=5.0) > 0.0)
 except NotImplementedError:
     skip("shrink checks", "not implemented yet")
+
+print()
+print("=" * 78)
+print("layoff_as_of")
+print("=" * 78)
+try:
+    nan_case = layoff_as_of(np.nan)
+    check("returns exactly LAYOFF_KEYS", set(nan_case) == set(LAYOFF_KEYS),
+          f"({sorted(nan_case)})")
+    check("a debutant (NaN days) gets NaN, not 0",
+          all(np.isnan(v) for v in nan_case.values()), f"({nan_case})")
+    edge = layoff_as_of(float(LONG_LAYOFF_DAYS))
+    check("exactly LONG_LAYOFF_DAYS counts as long (>=, not >)",
+          edge["long_layoff"] == 1.0, f"({edge})")
+    short = layoff_as_of(float(LONG_LAYOFF_DAYS - 1))
+    check("one day under the threshold is not long",
+          short["long_layoff"] == 0.0, f"({short})")
+    check("log_layoff is log1p(days)",
+          np.isclose(layoff_as_of(1253.0)["log_layoff"], np.log1p(1253.0)))
+    check("flag is a float 0/1, not a bool",
+          type(short["long_layoff"]) is float, f"({type(short['long_layoff'])})")
+except NotImplementedError:
+    skip("layoff_as_of checks", "not implemented yet")
 
 print()
 print("=" * 78)
