@@ -74,3 +74,18 @@ inside the 0.6082 +/- 0.0202 band. It sits 0.0085 below the 2026-10-08 run,
 which is a third of the fold sd. Previous files kept in `backup-2026-10-08/`.
 Fight-week scoring of the five cards (`scripts/score_cards.py`): 0.562
 (binomial sd 0.062) over 64 bouts.
+
+### 2026-11-24 — ESPN catch-up, 2026-11-14 -> 2026-11-21
+Ingested by `scripts/refresh_data.py` (ESPN source), two cards: 11-14 (13,
+UFC 334) and 11-21 (12, UFC Fight Night Doha). Fights 8,965 -> 8,990 raw;
+labelled +24 (the 11-14 Medic vs Holland bout is written `Draw/NC` and dropped
+by the label cleaner). 2 bio stubs added (John Mitchell, Shoaib Yousaf),
+biometrics blank. Fighters 4,561 -> 4,563. 20 of 26 per-fight stat columns
+carry values.
+
+Gate: all 8 test suites pass; walk-forward `+ rolling form` 0.6067 (sd 0.0282),
+inside the 0.6082 +/- 0.0202 band. Previous files kept in `backup-2026-11-07/`.
+The old `_refreshed.csv` there is a stale, never-adopted side ingest (8,978
+rows, different ids for the 10-10 card); `_final` and `_refreshed` are now
+byte-identical again. Fight-week scoring of the Doha card
+(`scripts/score_cards.py`): 9/12 = 0.750 (binomial sd 0.125).
