@@ -118,6 +118,32 @@ RECENT_N = 5
 # stat rates do.
 FINISH_QUALITY_KEYS = ("recent_finish_rate", "finish_round_mean")
 
+# LAYOFF, opt-in -- see layoff_as_of below.
+#
+# days_since_last is already in AS_OF_FEATURES, but it only reaches the model
+# as a DIFFERENCE. A 1,250-day vs 90-day matchup and a 1,400-day vs 240-day one
+# read the same, and a debutant's side is imputed to 0 + missing flag. These two
+# columns give the trees a per-side "returning from a long absence" signal.
+#
+# MEASURED BEFORE FITTING ANYTHING (raw win rate by layoff, all UFC fights):
+#
+#   layoff        n      win rate
+#   <= 6 mo    7,988     0.525
+#   6-12 mo    5,278     0.509
+#   12-18 mo     932     0.438
+#   18-24 mo     287     0.373
+#   2-3 yr       181     0.431
+#   3+ yr        132     0.455
+#
+# The signal is real past a year, but it is NOT monotonic -- multi-year
+# retirements (the Nunes case that prompted this) do better than 18-month
+# layoffs -- and everything past a year is ~10% of fighter-appearances.
+# Prediction recorded before measuring: inside noise, like finish quality.
+# RESULT: inside noise on every metric, point estimate slightly worse.
+# Retired; numbers in scripts/evaluate_models.py.
+LONG_LAYOFF_DAYS = 365
+LAYOFF_KEYS = ("long_layoff", "log_layoff")
+
 ELO_INITIAL = 1500.0
 ELO_K = 24.0
 # Fewer than this many prior fights and the rolling rates are mostly noise.
@@ -313,6 +339,7 @@ def _debut_features(prior: dict, elo: float) -> dict:
         "finish_rate": prior["finish_rate"],
         "finished_rate": prior["finished_rate"],
         **{k: np.nan for k in FINISH_QUALITY_KEYS},
+        **{k: np.nan for k in LAYOFF_KEYS},
         "sig_landed_pm": np.nan,
         "sig_absorbed_pm": np.nan,
         "td_landed_p15m": np.nan,
@@ -453,6 +480,48 @@ def finish_quality_as_of(past) -> dict:
     }
 
 
+def layoff_as_of(days_since_last: float) -> dict:
+    """Per-side layoff signal, derived from days_since_last only.
+
+    days_since_last is computed by features_as_of from fights STRICTLY BEFORE
+    the cutoff, so this inherits that leakage boundary and must not reach for
+    any other data. test_leakage's fabricated-future check covers every key
+    features_as_of returns, these included.
+
+    Args:
+        days_since_last: days from this fighter's previous UFC fight to the
+            cutoff. NaN for a debutant (no previous fight).
+
+    Returns:
+        dict with exactly LAYOFF_KEYS:
+
+        long_layoff: 1.0 if the layoff is at least LONG_LAYOFF_DAYS, else 0.0.
+            In the diff this becomes -1 / 0 / +1: "only A is returning",
+            "both or neither", "only B is returning".
+
+        log_layoff: log(1 + days). Compresses the tail so 1,100 vs 1,300 days
+            is a small gap and 30 vs 230 days is a large one. Note what the
+            DIFF of logs is: the log of the RATIO of the two layoffs -- a
+            different quantity from days_since_last_diff, which is why it is
+            not redundant for a tree even though log is monotone.
+
+        Both NaN when days_since_last is NaN. Not 0.0: a debutant has not had
+        a short layoff, they have no layoff at all, and the missing-flag path
+        exists to say exactly that.
+    """
+    # pd.isna, not np.isnan: it also accepts None, which a future caller
+    # passing an empty lookup could hand us.
+    if pd.isna(days_since_last):
+        return {k: np.nan for k in LAYOFF_KEYS}
+    days = float(days_since_last)
+    return {
+        # float(), not the bool: a bool diff (True - False) works in numpy but
+        # breaks the "every column is a float" assumption rows_to_matrix makes.
+        "long_layoff": float(days >= LONG_LAYOFF_DAYS),
+        "log_layoff": float(np.log1p(days)),
+    }
+
+
 def features_as_of(index: "HistoryIndex", fighter_url: str, as_of_date,
                    weight_class=None, priors: dict = None,
                    elo_ratings: dict = None) -> dict:
@@ -548,8 +617,15 @@ def features_as_of(index: "HistoryIndex", fighter_url: str, as_of_date,
     except NotImplementedError:
         finish_quality = {k: np.nan for k in FINISH_QUALITY_KEYS}
 
+    # Opt-in, same skeleton pattern as finish quality: NaN until implemented.
+    try:
+        layoff = layoff_as_of(days_since_last)
+    except NotImplementedError:
+        layoff = {k: np.nan for k in LAYOFF_KEYS}
+
     return {
         **finish_quality,
+        **layoff,
         "n_fights": n,
         "win_rate": shrink(wins, n, prior["win_rate"], SHRINK_ALPHA),
         "win_rate_raw": win_rate_raw,

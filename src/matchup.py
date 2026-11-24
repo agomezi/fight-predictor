@@ -51,6 +51,7 @@ from src.features import (
 from src.history import (
     AS_OF_FEATURES,
     FINISH_QUALITY_KEYS,
+    LAYOFF_KEYS,
     OPPONENT_QUALITY_KEYS,
     features_as_of,
     prior_for,
@@ -67,6 +68,12 @@ ROLLING_DIFF_NAMES = tuple(f"{k}_diff" for k in AS_OF_FEATURES)
 FINISH_QUALITY_NAMES = (
     tuple(f"{k}_diff" for k in FINISH_QUALITY_KEYS)
     + tuple(f"{k}_diff_missing" for k in FINISH_QUALITY_KEYS)
+)
+
+# Layoff, opt-in for the same reason. See history.layoff_as_of.
+LAYOFF_NAMES = (
+    tuple(f"{k}_diff" for k in LAYOFF_KEYS)
+    + tuple(f"{k}_diff_missing" for k in LAYOFF_KEYS)
 )
 
 # Strength-of-schedule differences, opt-in. See history.OpponentQualityIndex for
@@ -299,7 +306,8 @@ def build_matchup_row(fighter_a_url: str, fighter_b_url: str, division,
     # do. They are built here so feature_columns(with_finish_quality=True) has
     # real columns to select; without this loop the opt-in names would resolve
     # to nothing.
-    for key in tuple(AS_OF_FEATURES) + tuple(FINISH_QUALITY_KEYS):
+    for key in (tuple(AS_OF_FEATURES) + tuple(FINISH_QUALITY_KEYS)
+                + tuple(LAYOFF_KEYS)):
         av, bv = a_feat.get(key, np.nan), b_feat.get(key, np.nan)
         value = np.nan if (pd.isna(av) or pd.isna(bv)) else float(av) - float(bv)
         missing = bool(pd.isna(value))
@@ -326,7 +334,8 @@ def feature_columns(with_rolling: bool = False,
                     with_bout_context: bool = False,
                     with_weight: bool = False,
                     with_opponent_adj: bool = False,
-                    with_finish_quality: bool = False) -> list:
+                    with_finish_quality: bool = False,
+                    with_layoff: bool = False) -> list:
     """The model's column list, in the one order both paths must agree on."""
     cols = list(FEATURE_NAMES)
     if with_rolling:
@@ -339,6 +348,8 @@ def feature_columns(with_rolling: bool = False,
         cols += list(OPPONENT_ADJ_NAMES)
     if with_finish_quality:
         cols += list(FINISH_QUALITY_NAMES)
+    if with_layoff:
+        cols += list(LAYOFF_NAMES)
     return cols
 
 

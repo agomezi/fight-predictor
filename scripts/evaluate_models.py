@@ -293,6 +293,23 @@ def main() -> None:
                                      with_finish_quality=True)),
     ),)
 
+    # Layoff -- MEASURED AND RETIRED (2026-11-17, data through UFC 334).
+    # Per-side long-layoff flag + log layoff, on top of the incumbent.
+    #
+    #   paired, 3 seeds x 8 folds, --baseline "rolling form":
+    #     accuracy  -0.0094  CI [-0.0233, +0.0044]   inside noise
+    #     log_loss  +0.0022  CI [-0.0007, +0.0049]   inside noise
+    #     brier     +0.0010  CI [-0.0003, +0.0023]   inside noise
+    #   walk-forward accuracy 0.6000 vs incumbent 0.6051
+    #
+    # Predicted before fitting: days_since_last_diff already carries the
+    # signal, and the multi-year-retirement tail that motivated it is 132 rows.
+    variants = variants + ((
+        "+ rolling + layoff",
+        dict(index=hist, priors=priors, elo_index=None,
+             columns=feature_columns(with_rolling=True, with_layoff=True)),
+    ),)
+
     # STEP A's subtraction test, in the same pass: drop the collinear cluster
     # HANDBACK-4 identified. With sqrt(n) columns sampled per node, redundant
     # axes crowd out informative ones, so removing them can raise accuracy.
